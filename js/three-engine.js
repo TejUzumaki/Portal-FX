@@ -1,95 +1,47 @@
 import * as THREE from 'https://esm.sh/three@0.164.1';
 
-let scene, camera, perspectiveCam, orthoCam, renderer;
-let cursorMesh, gridHelper;
+let scene, camera, renderer;
+let cursorMesh;
 let activeLine = null;
 let currentPoints = [];
 let sceneObjects = [];
 
-let isOrtho = false;
-let snapEnabled = true;
-const GRID_SIZE = 0.1;
+// Optical AR State
+let arEnabled = false;
+let baselineBeta = 0, baselineGamma = 0;
+let smoothBeta = 0, smoothGamma = 0;
+const GYRO_SMOOTHING = 0.05;
+
+const HOLO_COLOR = 0x00e5ff;
 
 export function initThree() {
     scene = new THREE.Scene();
-    
-    // Setup Both Cameras
-    const aspect = window.innerWidth / window.innerHeight;
-    perspectiveCam = new THREE.PerspectiveCamera(70, aspect, 0.01, 100);
-    const frustumSize = 2;
-    orthoCam = new THREE.OrthographicCamera(-frustumSize * aspect / 2, frustumSize * aspect / 2, frustumSize / 2, -frustumSize / 2, 0.01, 100);
-    camera = perspectiveCam;
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
     camera.position.z = 2;
-
-    // CAD Grid Floor
-    gridHelper = new THREE.GridHelper(10, 50, 0x444444, 0x222222);
-    gridHelper.rotation.x = Math.PI / 2; // Align to XY plane
-    scene.add(gridHelper);
 
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.domElement.id = 'three-canvas';
     document.body.appendChild(renderer.domElement);
 
-    const geo = new THREE.SphereGeometry(0.015, 16, 16);
+    const geo = new THREE.SphereGeometry(0.02, 16, 16);
     cursorMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xFFFFFF }));
     scene.add(cursorMesh);
 
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
     animate();
-}
-
-function onResize() {
-    const aspect = window.innerWidth / window.innerHeight;
-    perspectiveCam.aspect = aspect;
-    perspectiveCam.updateProjectionMatrix();
-    orthoCam.left = -2 * aspect / 2; orthoCam.right = 2 * aspect / 2;
-    orthoCam.top = 2 / 2; orthoCam.bottom = -2 / 2;
-    orthoCam.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
 
-export function toggleOrthographic() {
-    isOrtho = !isOrtho;
-    camera = isOrtho ? orthoCam : perspectiveCam;
-    camera.position.z = 2;
-    camera.lookAt(0,0,0);
-    document.getElementById('btn-ortho').classList.toggle('active', isOrtho);
-}
-
-export function toggleSnap() {
-    snapEnabled = !snapEnabled;
-    document.getElementById('btn-snap').classList.toggle('active', snapEnabled);
-}
-
-// Snapping Math: Locks to grid and auto-straightens lines
-function applySnapping(pos) {
-    if (!snapEnabled) return pos;
-    let snapped = pos.clone();
-    snapped.x = Math.round(pos.x / GRID_SIZE) * GRID_SIZE;
-    snapped.y = Math.round(pos.y / GRID_SIZE) * GRID_SIZE;
-    
-    // Straight line snapping (if drawing)
-    if (currentPoints.length > 0) {
-        const start = currentPoints[0];
-        const dx = snapped.x - start.x;
-        const dy = snapped.y - start.y;
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        
-        // If close to horizontal or vertical, force align
-        if (Math.abs(angle) < 15 || Math.abs(angle) > 165) snapped.y = start.y;
-        else if (Math.abs(angle - 90) < 15 || Math.abs(angle + 90) < 15) snapped.x = start.x;
-    }
-    return snapped;
-}
-
 export function screenTo3D(x, y) {
     const vec = new THREE.Vector3((x * 2) - 1, -(y * 2) + 1, 0.5);
     vec.unproject(camera); const dir = vec.sub(camera.position).normalize();
-    const pos3D = camera.position.clone().add(dir.multiplyScalar(-camera.position.z / dir.z));
-    return applySnapping(pos3D); // Apply grid snapping globally
+    return camera.position.clone().add(dir.multiplyScalar(-camera.position.z / dir.z));
 }
 
 export function updateCursor(pos3D) { if(cursorMesh) cursorMesh.position.copy(pos3D); }
@@ -101,7 +53,7 @@ export function continueDrawing(pos) {
     if (activeLine) scene.remove(activeLine);
     currentPoints.push(pos.clone());
     const geo = new THREE.BufferGeometry().setFromPoints(currentPoints);
-    const mat = new THREE.LineBasicMaterial({ color: 0xFFFFFF, linewidth: 2 });
+    const mat = new THREE.LineBasicMaterial({ color: HOLO_COLOR, linewidth: 2 });
     activeLine = new THREE.Line(geo, mat);
     scene.add(activeLine);
 }
@@ -133,30 +85,48 @@ export function finishLine() {
     if (activeLine) scene.remove(activeLine); activeLine = null;
     if (currentPoints.length > 1) {
         const s = processShape(currentPoints);
-        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.points), new THREE.LineBasicMaterial({ color: 0xAAAAAA, linewidth: 2 }));
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.points), new THREE.LineBasicMaterial({ color: HOLO_COLOR, linewidth: 2 }));
         scene.add(line);
         sceneObjects.push({ line, mesh: null, type: s.type, points: s.points, center: getCenter(s.points), width: s.width || 0, height: s.height || 0 });
     }
     currentPoints = [];
 }
 
-export function undo() {
-    if (sceneObjects.length === 0) return;
-    const obj = sceneObjects.pop();
-    if (obj.line) scene.remove(obj.line);
-    if (obj.mesh) scene.remove(obj.mesh);
+// --- OPTICAL AR (Camera Rotation) ---
+export function enableAR() {
+    arEnabled = true;
+    baselineBeta = smoothBeta; baselineGamma = smoothGamma;
 }
 
-export function clearAll() {
-    sceneObjects.forEach(obj => { if(obj.line) scene.remove(obj.line); if(obj.mesh) scene.remove(obj.mesh); });
-    sceneObjects = [];
+export function disableAR() {
+    arEnabled = false;
+    camera.rotation.set(0, 0, 0);
 }
 
+export function updateGyroscope(beta, gamma) {
+    smoothBeta += (beta - smoothBeta) * GYRO_SMOOTHING;
+    smoothGamma += (gamma - smoothGamma) * GYRO_SMOOTHING;
+
+    if (arEnabled) {
+        // Rotate the CAMERA, not the objects. Objects stay locked at 0,0,0.
+        camera.rotation.x = THREE.MathUtils.degToRad(smoothBeta - baselineBeta);
+        camera.rotation.y = THREE.MathUtils.degToRad(smoothGamma - baselineGamma);
+    }
+}
+
+// --- INTERACTIONS ---
 export function getSceneObjects2D() {
     return sceneObjects.map(obj => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for(let i=0; i<obj.points.length; i++) {
             const wp = obj.points[i].clone();
+            // Apply object's local rotation and scale to bounding box calculation
+            if (obj.line) {
+                wp.sub(obj.center);
+                wp.applyAxisAngle(new THREE.Vector3(0, 0, 1), obj.line.rotation.z);
+                wp.multiplyScalar(obj.line.scale.x);
+                wp.add(obj.center);
+            }
             const c2d = wp.project(camera);
             const sx = (c2d.x + 1) / 2, sy = (-c2d.y + 1) / 2;
             if(sx < minX) minX = sx; if(sx > maxX) maxX = sx;
@@ -168,10 +138,10 @@ export function getSceneObjects2D() {
 
 export function highlightObject(obj, isHover) {
     if (!obj) return; 
-    const c = isHover ? 0xFFFFFF : 0xAAAAAA;
+    const c = isHover ? 0xFFFFFF : HOLO_COLOR;
     if (obj.line) obj.line.material.color.setHex(c);
     if (obj.mesh) {
-        obj.mesh.material.color.setHex(isHover ? 0x555555 : 0x222222);
+        obj.mesh.material.color.setHex(isHover ? 0x555555 : 0x002a33);
         if(obj.mesh.children[0]) obj.mesh.children[0].material.color.setHex(c);
     }
 }
@@ -190,57 +160,11 @@ export function extrudeObject(obj, depth) {
     else if (obj.type === 'circle') { const r = obj.points[0].distanceTo(obj.center); g = new THREE.CylinderGeometry(r, r, depth, 32); g.rotateX(Math.PI / 2); g.translate(0, 0, depth / 2); }
     else return false;
     
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
+    // Holographic Material: Dark glass interior + Bright cyan wireframe
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x002a33, transparent: true, opacity: 0.3, side: THREE.DoubleSide }));
     const edges = new THREE.EdgesGeometry(g);
-    const wireframe = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xFFFFFF }));
+    const wireframe = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: HOLO_COLOR }));
     m.add(wireframe);
     
     m.position.copy(obj.center); scene.add(m); obj.mesh = m; return true;
-}
-
-// PRO FEATURE: Export everything to standard 3D .OBJ format
-export function exportOBJ() {
-    let objStr = "# Exported from Air-Touch CAD\n";
-    let vCount = 1;
-    
-    sceneObjects.forEach(item => {
-        if (item.mesh) {
-            const geo = item.mesh.geometry;
-            const pos = geo.attributes.position;
-            item.mesh.updateMatrixWorld();
-            const temp = new THREE.Vector3();
-            for(let i=0; i<pos.count; i++) {
-                temp.fromBufferAttribute(pos, i).applyMatrix4(item.mesh.matrixWorld);
-                objStr += `v ${temp.x.toFixed(4)} ${temp.y.toFixed(4)} ${temp.z.toFixed(4)}\n`;
-            }
-            if (geo.index) {
-               const idx = geo.index.array;
-               for(let i=0; i<idx.length; i+=3) {
-                   objStr += `f ${vCount+idx[i]} ${vCount+idx[i+1]} ${vCount+idx[i+2]}\n`;
-               }
-            }
-            vCount += pos.count;
-        } else if (item.line) {
-            const pos = item.line.geometry.attributes.position;
-            item.line.updateMatrixWorld();
-            const temp = new THREE.Vector3();
-            let indices = [];
-            for(let i=0; i<pos.count; i++) {
-                temp.fromBufferAttribute(pos, i).applyMatrix4(item.line.matrixWorld);
-                objStr += `v ${temp.x.toFixed(4)} ${temp.y.toFixed(4)} ${temp.z.toFixed(4)}\n`;
-                indices.push(vCount + i);
-            }
-            for(let i=1; i<indices.length; i++) {
-                objStr += `l ${indices[i-1]} ${indices[i]}\n`;
-            }
-            vCount += pos.count;
-        }
-    });
-    
-    const blob = new Blob([objStr], { type: 'text/plain' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'air-touch-cad.obj';
-    link.click();
-    URL.revokeObjectURL(link.href);
 }
