@@ -10,7 +10,6 @@ let arWorldGroup = new THREE.Group();
 let arEnabled = false;
 let baselineBeta = 0, baselineGamma = 0;
 let smoothBeta = 0, smoothGamma = 0;
-// Ultra-low smoothing to prevent drift (0.03 is very sticky/stable)
 const GYRO_SMOOTHING = 0.03;
 
 export function initThree() {
@@ -24,8 +23,9 @@ export function initThree() {
     renderer.domElement.id = 'three-canvas';
     document.body.appendChild(renderer.domElement);
 
+    // Minimal white cursor
     const geo = new THREE.SphereGeometry(0.015, 16, 16);
-    cursorMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x00ffff }));
+    cursorMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xFFFFFF }));
     scene.add(cursorMesh);
 
     window.addEventListener('resize', () => {
@@ -48,7 +48,6 @@ export function updateCursor(pos3D) { if(cursorMesh) cursorMesh.position.copy(po
 export function setCursorColor(hex) { if(cursorMesh) cursorMesh.material.color.setHex(hex); }
 
 export function startDrawing(pos) {
-    // THE CRITICAL FIX: Convert World Space to AR Local Space
     let localPos = pos.clone();
     if (arEnabled) arWorldGroup.worldToLocal(localPos);
     currentPoints = [localPos];
@@ -56,14 +55,12 @@ export function startDrawing(pos) {
 
 export function continueDrawing(pos) {
     if (activeLine) getActiveGroup().remove(activeLine);
-
-    // THE CRITICAL FIX: Convert World Space to AR Local Space
     let localPos = pos.clone();
     if (arEnabled) arWorldGroup.worldToLocal(localPos);
     currentPoints.push(localPos);
 
     const geo = new THREE.BufferGeometry().setFromPoints(currentPoints);
-    const mat = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 });
+    const mat = new THREE.LineBasicMaterial({ color: 0xFFFFFF, linewidth: 2 }); // Clean white active line
     activeLine = new THREE.Line(geo, mat);
     getActiveGroup().add(activeLine);
 }
@@ -96,17 +93,16 @@ export function finishLine() {
     const g = getActiveGroup(); if (activeLine) g.remove(activeLine); activeLine = null;
     if (currentPoints.length > 1) {
         const s = processShape(currentPoints);
-        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.points), new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 }));
+        // Finished lines are slightly dimmer grey for UI layering
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.points), new THREE.LineBasicMaterial({ color: 0xAAAAAA, linewidth: 2 }));
         g.add(line);
         sceneObjects.push({ line, mesh: null, type: s.type, points: s.points, center: getCenter(s.points), width: s.width || 0, height: s.height || 0 });
     }
     currentPoints = [];
 }
 
-// --- STABILIZED GYROSCOPE ANCHORING ---
 export function enableAR() {
     arEnabled = true;
-    // Lock the baseline to the CURRENT smoothed values the millisecond AR is turned on
     baselineBeta = smoothBeta; baselineGamma = smoothGamma;
     sceneObjects.forEach(obj => { if(obj.line && obj.line.parent === scene) arWorldGroup.attach(obj.line); if(obj.mesh && obj.mesh.parent === scene) arWorldGroup.attach(obj.mesh); });
 }
@@ -117,19 +113,14 @@ export function disableAR() {
 }
 
 export function updateGyroscope(beta, gamma) {
-    // Ignore Alpha (compass) completely - it causes massive drift on phones
-    // Heavily smooth Beta (front/back) and Gamma (left/right)
     smoothBeta += (beta - smoothBeta) * GYRO_SMOOTHING;
     smoothGamma += (gamma - smoothGamma) * GYRO_SMOOTHING;
-
     if (arEnabled) {
-        // Apply counter-rotation so the group stays frozen in space
         arWorldGroup.rotation.x = THREE.MathUtils.degToRad(baselineBeta - smoothBeta);
         arWorldGroup.rotation.y = THREE.MathUtils.degToRad(baselineGamma - smoothGamma);
     }
 }
 
-// --- INTERACTIONS ---
 export function getSceneObjects2D() {
     return sceneObjects.map(obj => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -147,10 +138,11 @@ export function getSceneObjects2D() {
 }
 
 export function highlightObject(obj, isHover) {
-    if (!obj) return; const c = isHover ? 0xffff00 : 0x00ffff;
+    if (!obj) return; 
+    const c = isHover ? 0xFFFFFF : 0xAAAAAA; // White on hover, grey default
     if (obj.line) obj.line.material.color.setHex(c);
     if (obj.mesh) {
-        obj.mesh.material.color.setHex(isHover ? 0x555500 : 0x005555);
+        obj.mesh.material.color.setHex(isHover ? 0x555555 : 0x222222);
         if(obj.mesh.children[0]) obj.mesh.children[0].material.color.setHex(c);
     }
 }
@@ -167,10 +159,10 @@ export function extrudeObject(obj, depth) {
     else if (obj.type === 'circle') { const r = obj.points[0].distanceTo(obj.center); g = new THREE.CylinderGeometry(r, r, depth, 32); g.rotateX(Math.PI / 2); g.translate(0, 0, depth / 2); }
     else return false;
     
-    // CAD UPGRADE: Transparent inner mesh + Glowing Wireframe edges
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x005555, transparent: true, opacity: 0.3, side: THREE.DoubleSide }));
+    // Professional CAD look: Dark grey transparent mesh + Bright white wireframe
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
     const edges = new THREE.EdgesGeometry(g);
-    const wireframe = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+    const wireframe = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xFFFFFF }));
     m.add(wireframe);
     
     m.position.copy(obj.center); getActiveGroup().add(m); obj.mesh = m; return true;

@@ -15,16 +15,25 @@
     </div>
 
     <video id="video" autoplay playsinline muted></video>
-    
-    <div id="status-box" style="max-width: 300px; font-size: 12px; line-height: 1.4;">
+
+    <div id="status-box">
         <div id="status">SYSTEM READY</div>
-        <div id="mode" style="color: #ff00ff; font-size: 16px; font-weight: bold; margin-bottom: 5px;">CURSOR MODE</div>
-        <div id="debug" style="color: #888; word-break: break-all;"></div>
+        <div id="mode">CURSOR MODE</div>
+        <div id="debug"></div>
     </div>
+
+    <button id="btn-cam" class="hud-btn" onclick="switchCamera()" aria-label="Switch Camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+    </button>
     
-    <button id="btn-cam" class="hud-btn" onclick="switchCamera()">Switch Cam</button>
-    <button id="btn-ar" class="hud-btn" style="top: 80px; right: 20px; border-color: #ff00ff; color: #ff00ff;" onclick="toggleAR()">AR: OFF</button>
-    <button id="init-tracking-btn" onclick="initializeHandTracking()">Initialize Hand Tracking</button>
+    <button id="btn-ar" class="hud-btn" onclick="toggleAR()" aria-label="Toggle AR">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16.5a1 1 0 0 1-.5.87l-8 4.5a1 1 0 0 1-1 0l-8-4.5a1 1 0 0 1-.5-.87v-9a1 1 0 0 1 .5-.87l8-4.5a1 1 0 0 1 1 0l8 4.5a1 1 0 0 1 .5.87z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
+    </button>
+
+    <button id="init-tracking-btn" onclick="initializeHandTracking()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
+        <span>Start</span>
+    </button>
 
     <script>
         const video = document.getElementById('video');
@@ -38,17 +47,25 @@
         const loadBar = document.getElementById('load-bar');
         const btnAr = document.getElementById('btn-ar');
         const initBtn = document.getElementById('init-tracking-btn');
-        
-        let currentFacing = 'user', Engine, handsInstance = null; 
+
+        let currentFacing = 'user', Engine, handsInstance = null;
         let smoothX = 0.5, smoothY = 0.5;
         const LERP = 0.45;
-        
+
         let handLostTime = null, lastHeartbeat = 0, isRecovering = false;
         let hoveredObj = null, grabbedObj = null, lastGrabPos3D = null, extrudeThreshold = 0;
         let isDrawing = false;
         let activeLine = [];
 
-        // GESTURE STATE MACHINE
+        // PROFESSIONAL PALETTE
+        const COLORS = {
+            white: 0xFFFFFF,
+            lightGrey: 0xDDDDDD,
+            midGrey: 0x888888,
+            darkGrey: 0x333333,
+            actionRed: 0xFF5555 // Used sparingly for grab/tap feedback
+        };
+
         let currentMode = 'cursor';
         let isPinching = false;
         const PINCH_ON = 0.05, PINCH_OFF = 0.1, DRAW_PINCH_ON = 0.03, DRAW_PINCH_OFF = 0.08;
@@ -60,7 +77,7 @@
             const middleExt = isFingerExtended(lm, 12, 9);
             const ringExt = isFingerExtended(lm, 16, 13);
             const pinkyExt = isFingerExtended(lm, 20, 17);
-            
+
             const dx = lm[8].x - lm[4].x, dy = lm[8].y - lm[4].y;
             const dist = Math.sqrt(dx*dx + dy*dy);
             const isPinch = dist < (currentMode === 'draw' ? DRAW_PINCH_ON : PINCH_ON);
@@ -81,16 +98,15 @@
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try { if ((await DeviceOrientationEvent.requestPermission()) !== 'granted') return; } catch(e) {}
             }
-            if (btnAr.innerText === "AR: OFF") {
-                btnAr.innerText = "AR: ON"; btnAr.style.background = "rgba(255, 0, 255, 0.2)";
+            const isOn = btnAr.classList.toggle('active');
+            if (isOn) {
                 window.addEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL LOCKED"; statusDiv.style.color = "#ff00ff";
+                statusDiv.innerText = "SPATIAL LOCKED"; 
             } else {
-                btnAr.innerText = "AR: OFF"; btnAr.style.background = "rgba(0, 0, 0, 0.5)";
                 window.removeEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL UNLOCKED"; statusDiv.style.color = "#00ffff";
+                statusDiv.innerText = "SPATIAL UNLOCKED"; 
             }
-            Engine[btnAr.innerText === "AR: ON" ? 'enableAR' : 'disableAR']();
+            Engine[isOn ? 'enableAR' : 'disableAR']();
         }
 
         function onResults(results) {
@@ -101,28 +117,25 @@
                         if (!handLostTime) handLostTime = Date.now();
                         else if (Date.now() - handLostTime > 1000) { Engine.finishLine(); isDrawing = false; handLostTime = null; }
                     }
-                    debugDiv.innerText = "No hands"; return; 
-                } 
-                
+                    debugDiv.innerText = "No hands"; return;
+                }
+
                 handLostTime = null;
                 const lm = results.multiHandLandmarks[0];
                 const { gesture, isPinch: newPinchState } = detectGestures(lm);
-                
-                // Pinch Hysteresis
+
                 const pOff = currentMode === 'draw' ? DRAW_PINCH_OFF : PINCH_OFF;
                 if (newPinchState && !isPinching) isPinching = true;
                 else if (!newPinchState && isPinching && gesture !== 'FIST') isPinching = false;
 
-                // Auto-Switch Modes
-                if (gesture === 'PEACE' && currentMode !== 'draw') { currentMode = 'draw'; modeDiv.innerText = "DRAW MODE"; modeDiv.style.color = "#ff00ff"; }
-                else if (gesture === 'POINT' && currentMode !== 'cursor') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'cursor'; modeDiv.innerText = "CURSOR MODE"; modeDiv.style.color = "#00ffff"; }
-                else if (gesture === 'FIST' && currentMode !== 'grab') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'grab'; modeDiv.innerText = "GRAB MODE"; modeDiv.style.color = "#ff8800"; }
+                if (gesture === 'PEACE' && currentMode !== 'draw') { currentMode = 'draw'; modeDiv.innerText = "DRAW MODE"; }
+                else if (gesture === 'POINT' && currentMode !== 'cursor') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'cursor'; modeDiv.innerText = "CURSOR MODE"; }
+                else if (gesture === 'FIST' && currentMode !== 'grab') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'grab'; modeDiv.innerText = "GRAB MODE"; }
 
                 const indexTip = lm[8];
                 smoothX += (indexTip.x - smoothX) * LERP; smoothY += (indexTip.y - smoothY) * LERP;
-                
-                // Engine expects strict 2D coordinates for worldToLocal math
-                const pos3D = Engine.screenTo3D(smoothX, smoothY); 
+
+                const pos3D = Engine.screenTo3D(smoothX, smoothY);
                 Engine.updateCursor(pos3D);
 
                 if (currentMode === 'draw') handleDrawMode(pos3D, gesture);
@@ -130,32 +143,31 @@
                 else handleCursorMode(pos3D, gesture);
 
                 debugDiv.innerText = `${gesture} | P: ${isPinching}`;
-            } catch (e) { debugDiv.innerHTML = `<span style="color:red">ERR: ${e.message}</span>`; }
+            } catch (e) { debugDiv.innerHTML = `<span style="color:#ff5555">ERR: ${e.message}</span>`; }
         }
 
         function handleDrawMode(pos3D, gesture) {
-            Engine.setCursorColor(isPinching ? 0x00ffff : 0xff00ff);
+            Engine.setCursorColor(isPinching ? COLORS.midGrey : COLORS.white);
             if (!isPinching) {
                 if (!isDrawing) { isDrawing = true; Engine.startDrawing(pos3D); }
                 else { Engine.continueDrawing(pos3D); }
-                statusDiv.innerText = "DRAWING"; statusDiv.style.color = "#ff00ff";
+                statusDiv.innerText = "DRAWING"; 
             } else {
-                if (isDrawing) { Engine.finishLine(); isDrawing = false; statusDiv.innerText = "LINE SAVED"; statusDiv.style.color = "#00ff41"; }
-                else statusDiv.innerText = "PEN UP"; statusDiv.style.color = "#00ffff";
+                if (isDrawing) { Engine.finishLine(); isDrawing = false; statusDiv.innerText = "LINE SAVED"; }
+                else statusDiv.innerText = "PEN UP"; 
             }
         }
 
         function handleCursorMode(pos3D, gesture) {
-            Engine.setCursorColor(isPinching ? 0xff0055 : 0x00ffff);
-            if (isPinching) { statusDiv.innerText = "TAP"; statusDiv.style.color = "#ff0055"; }
-            else { statusDiv.innerText = "CURSOR"; statusDiv.style.color = "#00ffff"; }
+            Engine.setCursorColor(isPinching ? COLORS.actionRed : COLORS.white);
+            if (isPinching) { statusDiv.innerText = "TAP"; } 
+            else { statusDiv.innerText = "CURSOR"; }
         }
 
         function handleGrabMode(pos3D, gesture) {
-            // USE THE CORRECT FUNCTION NAME: getSceneObjects2D
             const objects = Engine.getSceneObjects2D();
             let found = null;
-            
+
             for (let obj of objects) {
                 if (smoothX >= obj.minX && smoothX <= obj.maxX && smoothY >= obj.minY && smoothY <= obj.maxY) {
                     found = obj.id; break;
@@ -163,21 +175,21 @@
             }
 
             if (grabbedObj) {
-                Engine.setCursorColor(0xff0000);
+                Engine.setCursorColor(COLORS.actionRed);
                 const delta = pos3D.clone().sub(lastGrabPos3D);
-                
+
                 if ((grabbedObj.type === 'square' || grabbedObj.type === 'circle') && !grabbedObj.mesh && isPinching) {
-                    extrudeThreshold += (-delta.y); 
-                    if (extrudeThreshold > 0.3) { Engine.extrudeObject(grabbedObj, 0.5); statusDiv.innerText = "EXTRUDED!"; statusDiv.style.color = "#00ff41"; extrudeThreshold = 0; }
+                    extrudeThreshold += (-delta.y);
+                    if (extrudeThreshold > 0.3) { Engine.extrudeObject(grabbedObj, 0.5); statusDiv.innerText = "EXTRUDED!"; extrudeThreshold = 0; }
                 }
 
                 Engine.moveObject(grabbedObj, pos3D); lastGrabPos3D = pos3D.clone();
-                statusDiv.innerText = "DRAGGING"; statusDiv.style.color = "#ff0000";
+                statusDiv.innerText = "DRAGGING"; 
 
                 if (gesture !== 'FIST') {
                     Engine.highlightObject(grabbedObj, false);
                     grabbedObj = null; extrudeThreshold = 0;
-                    statusDiv.innerText = "DROPPED"; statusDiv.style.color = "#ff8800";
+                    statusDiv.innerText = "DROPPED"; 
                 }
             } else {
                 if (found !== hoveredObj) {
@@ -187,23 +199,23 @@
                 }
 
                 if (hoveredObj) {
-                    Engine.setCursorColor(0xffff00);
+                    Engine.setCursorColor(COLORS.lightGrey);
                     if (gesture === 'FIST') {
                         grabbedObj = hoveredObj; lastGrabPos3D = pos3D.clone(); extrudeThreshold = 0;
-                        statusDiv.innerText = `LOCKED [${grabbedObj.type.toUpperCase()}]`; statusDiv.style.color = "#ff0000";
+                        statusDiv.innerText = `LOCKED [${grabbedObj.type.toUpperCase()}]`; 
                     } else {
                         let hint = "Close fist to grab";
                         if ((hoveredObj.type === 'square' || hoveredObj.type === 'circle') && !hoveredObj.mesh) hint += " | Pinch & Pull up";
-                        statusDiv.innerText = `HOVER: ${hint}`; statusDiv.style.color = "#ffff00";
+                        statusDiv.innerText = `HOVER: ${hint}`; 
                     }
                 } else {
-                    Engine.setCursorColor(0xff8800);
-                    statusDiv.innerText = "GRAB MODE (Point inside shape)"; statusDiv.style.color = "#ff8800";
+                    Engine.setCursorColor(COLORS.midGrey);
+                    statusDiv.innerText = "GRAB MODE (Point inside shape)"; 
                 }
             }
         }
 
-        async function initializeHandTracking() { initBtn.innerText = "COMPILING..."; initBtn.style.pointerEvents = 'none'; await buildMediaPipe(); }
+        async function initializeHandTracking() { initBtn.style.display = 'none'; await buildMediaPipe(); }
 
         async function buildMediaPipe() {
             try {
@@ -212,14 +224,14 @@
                 handsInstance.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
                 handsInstance.onResults(onResults);
                 lastHeartbeat = Date.now(); isRecovering = false;
-                initBtn.style.display = 'none'; statusDiv.innerText = "AI ONLINE"; statusDiv.style.color = "#00ff41";
+                statusDiv.innerText = "AI ONLINE"; 
                 processFrame();
-            } catch (err) { debugDiv.innerHTML = `<span style="color:red">FATAL: ${err.message}</span>`; isRecovering = false; }
+            } catch (err) { debugDiv.innerHTML = `<span style="color:#ff5555">FATAL: ${err.message}</span>`; isRecovering = false; }
         }
 
         async function processFrame() {
             if (!isRecovering && (Date.now() - lastHeartbeat) > 2500) {
-                isRecovering = true; debugDiv.innerHTML = "<span style='color:#ff8800'>REBOOTING...</span>";
+                isRecovering = true; debugDiv.innerHTML = "<span style='color:#888'>REBOOTING...</span>";
                 await new Promise(r => setTimeout(r, 2000)); await buildMediaPipe(); return;
             }
             if (!isRecovering) {
@@ -233,8 +245,8 @@
             currentFacing = currentFacing === 'user' ? 'environment' : 'user';
             video.style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
             document.getElementById('three-canvas').style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
-            try { const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: {ideal: 640}, height: {ideal: 480}}}); video.srcObject = stream; await video.play(); } 
-            catch(e) { debugDiv.innerHTML = `<span style="color:red">CAM ERR</span>`; }
+            try { const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: {ideal: 640}, height: {ideal: 480}}}); video.srcObject = stream; await video.play(); }
+            catch(e) { debugDiv.innerHTML = `<span style="color:#ff5555">CAM ERR</span>`; }
         }
 
         async function boot() {
@@ -246,7 +258,7 @@
                 video.srcObject = stream; await video.play();
                 video.style.display = 'block'; if (currentFacing === 'user') video.style.transform = 'scaleX(-1)';
                 loader.style.display = 'none'; statusBox.style.opacity = '1';
-            } catch (err) { loadPercent.innerText = 'ERROR'; loadStep.innerText = err.message; loadPercent.style.color = '#ff0055'; }
+            } catch (err) { loadPercent.innerText = 'ERROR'; loadStep.innerText = err.message; loadPercent.style.color = '#ff5555'; }
         }
         boot();
     </script>
