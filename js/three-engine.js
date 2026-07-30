@@ -11,7 +11,7 @@ let arEnabled = false;
 let baselineBeta = 0, baselineGamma = 0;
 let smoothBeta = 0, smoothGamma = 0;
 // Ultra-low smoothing to prevent drift (0.03 is very sticky/stable)
-const GYRO_SMOOTHING = 0.03; 
+const GYRO_SMOOTHING = 0.03;
 
 export function initThree() {
     scene = new THREE.Scene();
@@ -19,7 +19,7 @@ export function initThree() {
     camera.position.z = 2;
     scene.add(arWorldGroup);
 
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true }); 
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.domElement.id = 'three-canvas';
     document.body.appendChild(renderer.domElement);
@@ -56,12 +56,12 @@ export function startDrawing(pos) {
 
 export function continueDrawing(pos) {
     if (activeLine) getActiveGroup().remove(activeLine);
-    
+
     // THE CRITICAL FIX: Convert World Space to AR Local Space
     let localPos = pos.clone();
     if (arEnabled) arWorldGroup.worldToLocal(localPos);
     currentPoints.push(localPos);
-    
+
     const geo = new THREE.BufferGeometry().setFromPoints(currentPoints);
     const mat = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 });
     activeLine = new THREE.Line(geo, mat);
@@ -97,7 +97,7 @@ export function finishLine() {
     if (currentPoints.length > 1) {
         const s = processShape(currentPoints);
         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.points), new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 }));
-        g.add(line); 
+        g.add(line);
         sceneObjects.push({ line, mesh: null, type: s.type, points: s.points, center: getCenter(s.points), width: s.width || 0, height: s.height || 0 });
     }
     currentPoints = [];
@@ -105,7 +105,7 @@ export function finishLine() {
 
 // --- STABILIZED GYROSCOPE ANCHORING ---
 export function enableAR() {
-    arEnabled = true; 
+    arEnabled = true;
     // Lock the baseline to the CURRENT smoothed values the millisecond AR is turned on
     baselineBeta = smoothBeta; baselineGamma = smoothGamma;
     sceneObjects.forEach(obj => { if(obj.line && obj.line.parent === scene) arWorldGroup.attach(obj.line); if(obj.mesh && obj.mesh.parent === scene) arWorldGroup.attach(obj.mesh); });
@@ -121,7 +121,7 @@ export function updateGyroscope(beta, gamma) {
     // Heavily smooth Beta (front/back) and Gamma (left/right)
     smoothBeta += (beta - smoothBeta) * GYRO_SMOOTHING;
     smoothGamma += (gamma - smoothGamma) * GYRO_SMOOTHING;
-    
+
     if (arEnabled) {
         // Apply counter-rotation so the group stays frozen in space
         arWorldGroup.rotation.x = THREE.MathUtils.degToRad(baselineBeta - smoothBeta);
@@ -134,7 +134,7 @@ export function getSceneObjects2D() {
     return sceneObjects.map(obj => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for(let i=0; i<obj.points.length; i++) {
-            const wp = new THREE.Vector3(); 
+            const wp = new THREE.Vector3();
             if (obj.line.parent === arWorldGroup) arWorldGroup.localToWorld(wp.copy(obj.points[i]));
             else wp.copy(obj.points[i]);
             const c2d = wp.project(camera);
@@ -149,7 +149,10 @@ export function getSceneObjects2D() {
 export function highlightObject(obj, isHover) {
     if (!obj) return; const c = isHover ? 0xffff00 : 0x00ffff;
     if (obj.line) obj.line.material.color.setHex(c);
-    if (obj.mesh) obj.mesh.material.color.setHex(isHover ? 0x555500 : 0x005555);
+    if (obj.mesh) {
+        obj.mesh.material.color.setHex(isHover ? 0x555500 : 0x005555);
+        if(obj.mesh.children[0]) obj.mesh.children[0].material.color.setHex(c);
+    }
 }
 
 export function moveObject(obj, pos3D) {
@@ -163,6 +166,12 @@ export function extrudeObject(obj, depth) {
     if (obj.type === 'square') { g = new THREE.BoxGeometry(obj.width, obj.height, depth); g.translate(0, 0, depth / 2); }
     else if (obj.type === 'circle') { const r = obj.points[0].distanceTo(obj.center); g = new THREE.CylinderGeometry(r, r, depth, 32); g.rotateX(Math.PI / 2); g.translate(0, 0, depth / 2); }
     else return false;
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x005555, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+    
+    // CAD UPGRADE: Transparent inner mesh + Glowing Wireframe edges
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x005555, transparent: true, opacity: 0.3, side: THREE.DoubleSide }));
+    const edges = new THREE.EdgesGeometry(g);
+    const wireframe = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+    m.add(wireframe);
+    
     m.position.copy(obj.center); getActiveGroup().add(m); obj.mesh = m; return true;
 }

@@ -5,7 +5,8 @@ import socket
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import os
 
-DIRECTORY = "/data/data/com.termux/files/home/airtouch"
+# Dynamically get the directory where this script is located
+DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 HTML_PORT = 8080
 WS_PORT = 8081
 
@@ -20,11 +21,11 @@ class ReusableHTTPServer(HTTPServer):
 async def handler(websocket):
     print("3D Hybrid Engine connected!")
     async for message in websocket:
-        pass 
+        pass
 
 async def ws_main():
     async with websockets.serve(handler, "localhost", WS_PORT, reuse_address=True):
-        await asyncio.Future() 
+        await asyncio.Future()
 
 def start_http():
     os.chdir(DIRECTORY)
