@@ -19,16 +19,49 @@
     <div id="status-box">
         <div id="status">SYSTEM READY</div>
         <div id="mode">CURSOR MODE</div>
-        <div id="debug"></div>
     </div>
 
+    <!-- Top Right Toggles -->
     <button id="btn-cam" class="hud-btn" onclick="switchCamera()" aria-label="Switch Camera">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
     </button>
-    
-    <button id="btn-ar" class="hud-btn" onclick="toggleAR()" aria-label="Toggle AR">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16.5a1 1 0 0 1-.5.87l-8 4.5a1 1 0 0 1-1 0l-8-4.5a1 1 0 0 1-.5-.87v-9a1 1 0 0 1 .5-.87l8-4.5a1 1 0 0 1 1 0l8 4.5a1 1 0 0 1 .5.87z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
+    <button id="btn-ortho" class="hud-btn" onclick="Engine.toggleOrthographic()" aria-label="Toggle Camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h18"></path></svg>
     </button>
+    <button id="btn-snap" class="hud-btn active" onclick="Engine.toggleSnap()" aria-label="Toggle Snapping">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 3v18M18 3v18M3 6h18M3 18h18"></path></svg>
+    </button>
+
+    <!-- Bottom Left Actions -->
+    <div id="action-bar">
+        <button class="hud-btn" onclick="Engine.undo()" aria-label="Undo" style="position: relative;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 14L4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>
+        </button>
+        <button class="hud-btn" onclick="Engine.clearAll()" aria-label="Clear All" style="position: relative;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+    </div>
+    <div id="export-bar">
+        <button class="hud-btn" onclick="Engine.exportOBJ()" aria-label="Export OBJ" style="background: #FFFFFF; color: #000000; border-color: #FFFFFF;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+        </button>
+    </div>
+
+    <!-- Bottom Toolbar Modes -->
+    <div id="toolbar">
+        <button class="tool-btn active" id="mode-cursor" onclick="setMode('cursor')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4l7 17 2.5-6.5L20 12 4 4z"></path></svg>
+            <span>MOVE</span>
+        </button>
+        <button class="tool-btn" id="mode-draw" onclick="setMode('draw')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path></svg>
+            <span>DRAW</span>
+        </button>
+        <button class="tool-btn" id="mode-grab" onclick="setMode('grab')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-4 0v5"></path><path d="M14 10V4a2 2 0 0 0-4 0v6"></path><path d="M10 10.5V6a2 2 0 0 0-4 0v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
+            <span>GRAB</span>
+        </button>
+    </div>
 
     <button id="init-tracking-btn" onclick="initializeHandTracking()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
@@ -39,54 +72,35 @@
         const video = document.getElementById('video');
         const statusDiv = document.getElementById("status");
         const modeDiv = document.getElementById("mode");
-        const debugDiv = document.getElementById("debug");
-        const statusBox = document.getElementById("status-box");
         const loader = document.getElementById('loader');
         const loadPercent = document.getElementById('load-percent');
         const loadStep = document.getElementById('load-step');
         const loadBar = document.getElementById('load-bar');
-        const btnAr = document.getElementById('btn-ar');
         const initBtn = document.getElementById('init-tracking-btn');
 
         let currentFacing = 'user', Engine, handsInstance = null;
         let smoothX = 0.5, smoothY = 0.5;
         const LERP = 0.45;
 
-        let handLostTime = null, lastHeartbeat = 0, isRecovering = false;
+        let lastHeartbeat = 0, isRecovering = false;
         let hoveredObj = null, grabbedObj = null, lastGrabPos3D = null, extrudeThreshold = 0;
         let isDrawing = false;
-        let activeLine = [];
 
-        // PROFESSIONAL PALETTE
-        const COLORS = {
-            white: 0xFFFFFF,
-            lightGrey: 0xDDDDDD,
-            midGrey: 0x888888,
-            darkGrey: 0x333333,
-            actionRed: 0xFF5555 // Used sparingly for grab/tap feedback
-        };
+        const COLORS = { white: 0xFFFFFF, lightGrey: 0xDDDDDD, midGrey: 0x888888, darkGrey: 0x333333, actionRed: 0xFF5555 };
 
         let currentMode = 'cursor';
         let isPinching = false;
         const PINCH_ON = 0.05, PINCH_OFF = 0.1, DRAW_PINCH_ON = 0.03, DRAW_PINCH_OFF = 0.08;
 
-        function isFingerExtended(lm, tip, mcp) { return lm[tip].y < lm[mcp].y; }
-
-        function detectGestures(lm) {
-            const indexExt = isFingerExtended(lm, 8, 5);
-            const middleExt = isFingerExtended(lm, 12, 9);
-            const ringExt = isFingerExtended(lm, 16, 13);
-            const pinkyExt = isFingerExtended(lm, 20, 17);
-
-            const dx = lm[8].x - lm[4].x, dy = lm[8].y - lm[4].y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            const isPinch = dist < (currentMode === 'draw' ? DRAW_PINCH_ON : PINCH_ON);
-
-            if (!indexExt && !middleExt && !ringExt && !pinkyExt) return { gesture: 'FIST', isPinch: false };
-            if (indexExt && middleExt && !ringExt && !pinkyExt) return { gesture: 'PEACE', isPinch };
-            if (indexExt && !middleExt && !ringExt && !pinkyExt) return { gesture: 'POINT', isPinch };
-            return { gesture: 'UNKNOWN', isPinch };
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`mode-${mode}`).classList.add('active');
+            modeDiv.innerText = `${mode.toUpperCase()} MODE`;
+            if (isDrawing) { Engine.finishLine(); isDrawing = false; }
         }
+
+        function isFingerExtended(lm, tip, mcp) { return lm[tip].y < lm[mcp].y; }
 
         async function robustGetUserMedia(c) {
             if (video.srcObject) { video.srcObject.getTracks().forEach(t => { t.stop(); t.onended = null; }); video.srcObject = null; }
@@ -94,43 +108,22 @@
             catch (err) { await new Promise(r => setTimeout(r, 1500)); return await navigator.mediaDevices.getUserMedia(c); }
         }
 
-        async function toggleAR() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { if ((await DeviceOrientationEvent.requestPermission()) !== 'granted') return; } catch(e) {}
-            }
-            const isOn = btnAr.classList.toggle('active');
-            if (isOn) {
-                window.addEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL LOCKED"; 
-            } else {
-                window.removeEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL UNLOCKED"; 
-            }
-            Engine[isOn ? 'enableAR' : 'disableAR']();
-        }
-
         function onResults(results) {
             lastHeartbeat = Date.now();
             try {
                 if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-                    if (isDrawing) {
-                        if (!handLostTime) handLostTime = Date.now();
-                        else if (Date.now() - handLostTime > 1000) { Engine.finishLine(); isDrawing = false; handLostTime = null; }
-                    }
-                    debugDiv.innerText = "No hands"; return;
+                    if (isDrawing) { Engine.finishLine(); isDrawing = false; }
+                    return;
                 }
 
-                handLostTime = null;
                 const lm = results.multiHandLandmarks[0];
-                const { gesture, isPinch: newPinchState } = detectGestures(lm);
+                const dx = lm[8].x - lm[4].x, dy = lm[8].y - lm[4].y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const isPinch = dist < (currentMode === 'draw' ? DRAW_PINCH_ON : PINCH_ON);
 
                 const pOff = currentMode === 'draw' ? DRAW_PINCH_OFF : PINCH_OFF;
-                if (newPinchState && !isPinching) isPinching = true;
-                else if (!newPinchState && isPinching && gesture !== 'FIST') isPinching = false;
-
-                if (gesture === 'PEACE' && currentMode !== 'draw') { currentMode = 'draw'; modeDiv.innerText = "DRAW MODE"; }
-                else if (gesture === 'POINT' && currentMode !== 'cursor') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'cursor'; modeDiv.innerText = "CURSOR MODE"; }
-                else if (gesture === 'FIST' && currentMode !== 'grab') { if(isDrawing){Engine.finishLine(); isDrawing=false;} currentMode = 'grab'; modeDiv.innerText = "GRAB MODE"; }
+                if (isPinch && !isPinching) isPinching = true;
+                else if (!isPinch && isPinching) isPinching = false;
 
                 const indexTip = lm[8];
                 smoothX += (indexTip.x - smoothX) * LERP; smoothY += (indexTip.y - smoothY) * LERP;
@@ -138,58 +131,50 @@
                 const pos3D = Engine.screenTo3D(smoothX, smoothY);
                 Engine.updateCursor(pos3D);
 
-                if (currentMode === 'draw') handleDrawMode(pos3D, gesture);
-                else if (currentMode === 'grab') handleGrabMode(pos3D, gesture);
-                else handleCursorMode(pos3D, gesture);
+                if (currentMode === 'draw') handleDrawMode(pos3D);
+                else if (currentMode === 'grab') handleGrabMode(pos3D);
+                else handleCursorMode(pos3D);
 
-                debugDiv.innerText = `${gesture} | P: ${isPinching}`;
-            } catch (e) { debugDiv.innerHTML = `<span style="color:#ff5555">ERR: ${e.message}</span>`; }
+            } catch (e) { console.error(e); }
         }
 
-        function handleDrawMode(pos3D, gesture) {
+        function handleDrawMode(pos3D) {
             Engine.setCursorColor(isPinching ? COLORS.midGrey : COLORS.white);
-            if (!isPinching) {
+            if (!isPinching) { // Pinch OFF = Drawing
                 if (!isDrawing) { isDrawing = true; Engine.startDrawing(pos3D); }
                 else { Engine.continueDrawing(pos3D); }
-                statusDiv.innerText = "DRAWING"; 
-            } else {
+                statusDiv.innerText = "DRAWING";
+            } else { // Pinch ON = Pen Up
                 if (isDrawing) { Engine.finishLine(); isDrawing = false; statusDiv.innerText = "LINE SAVED"; }
-                else statusDiv.innerText = "PEN UP"; 
+                else statusDiv.innerText = "PEN UP";
             }
         }
 
-        function handleCursorMode(pos3D, gesture) {
+        function handleCursorMode(pos3D) {
             Engine.setCursorColor(isPinching ? COLORS.actionRed : COLORS.white);
-            if (isPinching) { statusDiv.innerText = "TAP"; } 
-            else { statusDiv.innerText = "CURSOR"; }
+            statusDiv.innerText = isPinching ? "TAP" : "CURSOR";
         }
 
-        function handleGrabMode(pos3D, gesture) {
+        function handleGrabMode(pos3D) {
             const objects = Engine.getSceneObjects2D();
             let found = null;
-
             for (let obj of objects) {
-                if (smoothX >= obj.minX && smoothX <= obj.maxX && smoothY >= obj.minY && smoothY <= obj.maxY) {
-                    found = obj.id; break;
-                }
+                if (smoothX >= obj.minX && smoothX <= obj.maxX && smoothY >= obj.minY && smoothY <= obj.maxY) { found = obj.id; break; }
             }
 
             if (grabbedObj) {
                 Engine.setCursorColor(COLORS.actionRed);
                 const delta = pos3D.clone().sub(lastGrabPos3D);
-
                 if ((grabbedObj.type === 'square' || grabbedObj.type === 'circle') && !grabbedObj.mesh && isPinching) {
                     extrudeThreshold += (-delta.y);
                     if (extrudeThreshold > 0.3) { Engine.extrudeObject(grabbedObj, 0.5); statusDiv.innerText = "EXTRUDED!"; extrudeThreshold = 0; }
                 }
-
                 Engine.moveObject(grabbedObj, pos3D); lastGrabPos3D = pos3D.clone();
-                statusDiv.innerText = "DRAGGING"; 
-
-                if (gesture !== 'FIST') {
+                statusDiv.innerText = "DRAGGING";
+                if (!isPinching) { // Release pinch to drop
                     Engine.highlightObject(grabbedObj, false);
                     grabbedObj = null; extrudeThreshold = 0;
-                    statusDiv.innerText = "DROPPED"; 
+                    statusDiv.innerText = "DROPPED";
                 }
             } else {
                 if (found !== hoveredObj) {
@@ -197,20 +182,17 @@
                     hoveredObj = found;
                     if (hoveredObj) Engine.highlightObject(hoveredObj, true);
                 }
-
                 if (hoveredObj) {
                     Engine.setCursorColor(COLORS.lightGrey);
-                    if (gesture === 'FIST') {
+                    if (isPinching) { // Pinch to grab
                         grabbedObj = hoveredObj; lastGrabPos3D = pos3D.clone(); extrudeThreshold = 0;
-                        statusDiv.innerText = `LOCKED [${grabbedObj.type.toUpperCase()}]`; 
+                        statusDiv.innerText = `LOCKED`;
                     } else {
-                        let hint = "Close fist to grab";
-                        if ((hoveredObj.type === 'square' || hoveredObj.type === 'circle') && !hoveredObj.mesh) hint += " | Pinch & Pull up";
-                        statusDiv.innerText = `HOVER: ${hint}`; 
+                        statusDiv.innerText = "Pinch to grab";
                     }
                 } else {
                     Engine.setCursorColor(COLORS.midGrey);
-                    statusDiv.innerText = "GRAB MODE (Point inside shape)"; 
+                    statusDiv.innerText = "GRAB MODE";
                 }
             }
         }
@@ -224,14 +206,14 @@
                 handsInstance.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
                 handsInstance.onResults(onResults);
                 lastHeartbeat = Date.now(); isRecovering = false;
-                statusDiv.innerText = "AI ONLINE"; 
+                statusDiv.innerText = "AI ONLINE";
                 processFrame();
-            } catch (err) { debugDiv.innerHTML = `<span style="color:#ff5555">FATAL: ${err.message}</span>`; isRecovering = false; }
+            } catch (err) { console.error("FATAL:", err); }
         }
 
         async function processFrame() {
             if (!isRecovering && (Date.now() - lastHeartbeat) > 2500) {
-                isRecovering = true; debugDiv.innerHTML = "<span style='color:#888'>REBOOTING...</span>";
+                isRecovering = true; statusDiv.innerText = "REBOOTING...";
                 await new Promise(r => setTimeout(r, 2000)); await buildMediaPipe(); return;
             }
             if (!isRecovering) {
@@ -246,7 +228,7 @@
             video.style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
             document.getElementById('three-canvas').style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
             try { const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: {ideal: 640}, height: {ideal: 480}}}); video.srcObject = stream; await video.play(); }
-            catch(e) { debugDiv.innerHTML = `<span style="color:#ff5555">CAM ERR</span>`; }
+            catch(e) { statusDiv.innerText = "CAM ERR"; }
         }
 
         async function boot() {
@@ -257,7 +239,7 @@
                 const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: { ideal: 320 }, height: { ideal: 240 } }});
                 video.srcObject = stream; await video.play();
                 video.style.display = 'block'; if (currentFacing === 'user') video.style.transform = 'scaleX(-1)';
-                loader.style.display = 'none'; statusBox.style.opacity = '1';
+                loader.style.display = 'none';
             } catch (err) { loadPercent.innerText = 'ERROR'; loadStep.innerText = err.message; loadPercent.style.color = '#ff5555'; }
         }
         boot();
