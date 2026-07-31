@@ -6,9 +6,9 @@
 html, body { height: 100%; background: var(--bg); overflow: hidden; touch-action: none; font-family: 'Inter', system-ui, sans-serif; }
 
 video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
-#canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; transform: scaleX(-1); }
+#canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; /* Mirroring handled in JS now */ }
 
-#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); /* Mirror UI to match video */ }
 
 .hud-btn {
     position: absolute; pointer-events: all;
