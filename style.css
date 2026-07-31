@@ -8,7 +8,8 @@ html, body { height: 100%; background: var(--bg); overflow: hidden; touch-action
 video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
 #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
-#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); }
+/* FIXED: Removed scaleX(-1) so the UI text is not backwards */
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
 
 .hud-btn {
     position: absolute; pointer-events: all;
@@ -30,20 +31,24 @@ video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object
 #status { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
 #mode { color: var(--text-subtle); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
 
+/* Premium Animated Loader */
 #loader { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-#load-percent { color: var(--text); font-size: 3rem; font-weight: 300; letter-spacing: -2px; }
-#load-step { color: var(--text-subtle); font-size: 0.875rem; margin-top: 8px; text-transform: uppercase; letter-spacing: 2px;}
-#load-bar-bg { width: 220px; height: 2px; background: var(--panel); margin-top: 32px; overflow: hidden; border-radius: 2px; }
-#load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.4s ease-out; }
-#tejas-footer { color: var(--text-subtle); margin-top: 40px; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; }
+.load-content { animation: fadeUp 1.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; opacity: 0; }
+#load-percent { color: var(--text); font-size: 3.5rem; font-weight: 200; letter-spacing: -3px; }
+#load-step { color: var(--text-subtle); font-size: 0.875rem; margin-top: 8px; text-transform: uppercase; letter-spacing: 3px;}
+#load-bar-bg { width: 240px; height: 2px; background: var(--panel); margin-top: 40px; overflow: hidden; border-radius: 2px; }
+#load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.8s ease-out; }
+#tejas-footer { color: #444; margin-top: 50px; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; text-align: center; line-height: 1.6; animation: fadeUp 1.5s 0.5s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; opacity: 0; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
 #init-btn {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     z-index: 50; pointer-events: all; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--border); color: var(--text);
-    padding: 20px 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-    border-radius: 12px; cursor: pointer; backdrop-filter: blur(6px); transition: all 0.3s ease; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: 2px;
+    padding: 20px 50px; display: flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 12px; cursor: pointer; backdrop-filter: blur(6px); transition: all 0.3s ease; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: 3px;
 }
-#init-btn:active { transform: translate(-50%, -50%) scale(0.95); border-color: var(--text); }
+#init-btn:active { transform: translate(-50%, -50%) scale(0.95); border-color: var(--text); background: rgba(255,255,255,0.1); }
 
 #rotate-overlay {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: var(--bg); z-index: 2000;

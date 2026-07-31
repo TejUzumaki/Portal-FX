@@ -14,10 +14,15 @@
     </div>
 
     <div id="loader">
-        <div id="load-percent">0%</div>
-        <div id="load-step">Initializing</div>
-        <div id="load-bar-bg"><div id="load-bar"></div></div>
-        <div id="tejas-footer">Made by Tejas - Enjoy the effects</div>
+        <div class="load-content">
+            <div id="load-percent">0%</div>
+            <div id="load-step">Initializing</div>
+            <div id="load-bar-bg"><div id="load-bar"></div></div>
+        </div>
+        <div id="tejas-footer">
+            Made by Tejas - Enjoy the effects<br>
+            Concept inspired by a friend's vision
+        </div>
     </div>
 
     <video id="video" autoplay playsinline muted></video>
@@ -48,14 +53,13 @@
 
         let currentFacing = 'user', handsInstance = null;
         let lastHeartbeat = 0, isRecovering = false;
-        let currentEffect = 0; // 0: Thermal, 1: Polka, 2: Invert
-        const effectNames = ["THERMAL", "POLKA", "INVERT"];
+        let currentEffect = 0; // 0: Thermal, 1: Glass, 2: Invert
+        const effectNames = ["THERMAL", "GLASS", "INVERT"];
         let lastCycleAngle = 0;
 
         const offCanvas = document.createElement('canvas');
         const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
-        // MediaPipe Hand Skeleton Connections
         const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 
         function checkOrientation() {
@@ -67,13 +71,10 @@
                 if (!handsInstance) initBtn.style.display = 'block';
             }
         }
-        window.addEventListener('resize', checkOrientation);
 
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            offCanvas.width = window.innerWidth;
-            offCanvas.height = window.innerHeight;
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            offCanvas.width = window.innerWidth; offCanvas.height = window.innerHeight;
             checkOrientation();
         }
         window.addEventListener('resize', resizeCanvas);
@@ -93,7 +94,6 @@
         const mapX = (px) => currentFacing === 'user' ? (1 - px) * canvas.width : px * canvas.width;
         const mapY = (py) => py * canvas.height;
 
-        // Perfectly match the CSS object-fit: cover scaling for the internal video feed
         function drawVideoCover(targetCtx, srcVideo, w, h) {
             const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
             if (!vw || !vh) return;
@@ -111,22 +111,15 @@
         }
 
         function drawSkeleton(hand) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 2;
             ctx.beginPath();
             HAND_CONNECTIONS.forEach(([i, j]) => {
                 ctx.moveTo(mapX(hand[i].x), mapY(hand[i].y));
                 ctx.lineTo(mapX(hand[j].x), mapY(hand[j].y));
             });
             ctx.stroke();
-            
-            // MediaPipe Red Dots
             ctx.fillStyle = '#FF3333';
-            hand.forEach(pt => {
-                ctx.beginPath();
-                ctx.arc(mapX(pt.x), mapY(pt.y), 4, 0, Math.PI * 2);
-                ctx.fill();
-            });
+            hand.forEach(pt => { ctx.beginPath(); ctx.arc(mapX(pt.x), mapY(pt.y), 4, 0, Math.PI * 2); ctx.fill(); });
         }
 
         function onResults(results) {
@@ -134,13 +127,11 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                // 1. Always draw all skeletons first
                 results.multiHandLandmarks.forEach(hand => drawSkeleton(hand));
 
                 if (results.multiHandLandmarks.length === 2) {
                     const hands = results.multiHandLandmarks.sort((a, b) => a[8].x - b[8].x);
                     
-                    // Auto-cycle effect based on vertical angle shift
                     let currentAngle = Math.atan2(hands[1][8].y - hands[0][8].y, hands[1][8].x - hands[0][8].x) * 180 / Math.PI;
                     if (Math.abs(currentAngle - lastCycleAngle) > 25) {
                         cycleEffect();
@@ -150,7 +141,6 @@
                     const p1 = hands[0][4], p2 = hands[0][8], p3 = hands[1][8], p4 = hands[1][4];
                     const pts = [p1, p2, p3, p4].map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
 
-                    // 2. Clip and Apply Effect
                     ctx.save();
                     ctx.beginPath();
                     ctx.moveTo(pts[0].x, pts[0].y);
@@ -162,9 +152,8 @@
                     applyEffect();
                     ctx.restore();
 
-                    // 3. Draw Crisp White Outline
-                    ctx.strokeStyle = '#FFFFFF';
-                    ctx.lineWidth = 4;
+                    // Crisp White Outline
+                    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4;
                     ctx.beginPath();
                     ctx.moveTo(pts[0].x, pts[0].y);
                     ctx.lineTo(pts[1].x, pts[1].y);
@@ -178,7 +167,6 @@
                     statusDiv.innerText = "SHOW 2 HANDS";
                 }
 
-                // 4. ALWAYS draw White Tracking Dots on Thumb(4) and Index(8) for all hands
                 ctx.fillStyle = '#FFFFFF';
                 results.multiHandLandmarks.forEach(hand => {
                     [4, 8].forEach(joint => {
@@ -194,49 +182,55 @@
 
         function applyEffect() {
             const w = canvas.width, h = canvas.height;
-            
-            if (currentEffect === 0 || currentEffect === 2) {
-                drawVideoCover(offCtx, video, w, h);
-                const imgData = offCtx.getImageData(0, 0, w, h);
-                const d = imgData.data;
+            drawVideoCover(offCtx, video, w, h);
+            ctx.drawImage(offCanvas, 0, 0);
 
-                if (currentEffect === 0) { // Thermal
-                    for (let i = 0; i < d.length; i += 4) {
-                        const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; 
-                        if (v < 0.5) {
-                            d[i] = 255 * (v * 2); d[i+1] = 0; d[i+2] = 255 * (1 - (v * 2)); 
-                        } else {
-                            d[i] = 255; d[i+1] = 255 * ((v - 0.5) * 2); d[i+2] = 0; 
-                        }
-                    }
-                } else if (currentEffect === 2) { // Invert
-                    for (let i = 0; i < d.length; i += 4) {
-                        d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
-                    }
+            if (currentEffect === 0) { // Thermal
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; 
+                    if (v < 0.5) { d[i] = 255 * (v * 2); d[i+1] = 0; d[i+2] = 255 * (1 - (v * 2)); } 
+                    else { d[i] = 255; d[i+1] = 255 * ((v - 0.5) * 2); d[i+2] = 0; }
                 }
-                offCtx.putImageData(imgData, 0, 0);
-                ctx.drawImage(offCanvas, 0, 0);
+                ctx.putImageData(imgData, 0, 0);
             } 
-            else if (currentEffect === 1) { // Translucent Polka Dots
-                // Draw the video first so it's not just black
-                drawVideoCover(offCtx, video, w, h);
+            else if (currentEffect === 1) { // Glassmorphic / Magic Glass
+                // 1. Slight blur to simulate glass distortion
+                ctx.filter = 'blur(2px) contrast(1.1) brightness(1.1)';
                 ctx.drawImage(offCanvas, 0, 0);
+                ctx.filter = 'none';
                 
-                // Overlay translucent grey
-                ctx.fillStyle = 'rgba(15, 15, 15, 0.7)';
+                // 2. Subtle blue glass tint
+                ctx.fillStyle = 'rgba(150, 200, 255, 0.08)';
                 ctx.fillRect(0, 0, w, h);
                 
-                // Draw white dots
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                const step = 35;
-                for (let y = 0; y < h; y += step) {
-                    for (let x = 0; x < w; x += step) {
-                        const offset = (y / step) % 2 === 0 ? 0 : step / 2;
-                        ctx.beginPath();
-                        ctx.arc(x + offset, y, 7, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
+                // 3. Dynamic Glare Line 1 (Diagonal)
+                const t = Date.now() / 1000;
+                const g1 = ctx.createLinearGradient(0, h * (0.3 + Math.sin(t)*0.1), w, h * (0.7 + Math.cos(t)*0.1));
+                g1.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                g1.addColorStop(0.45, 'rgba(255, 255, 255, 0.15)');
+                g1.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+                g1.addColorStop(0.55, 'rgba(255, 255, 255, 0.15)');
+                g1.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = g1;
+                ctx.fillRect(0, 0, w, h);
+                
+                // 4. Dynamic Glare Line 2 (Opposite Diagonal)
+                const g2 = ctx.createLinearGradient(w, h * 0.2, 0, h * 0.8);
+                g2.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                g2.addColorStop(0.6, 'rgba(255, 255, 255, 0.1)');
+                g2.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = g2;
+                ctx.fillRect(0, 0, w, h);
+            } 
+            else if (currentEffect === 2) { // Invert
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
                 }
+                ctx.putImageData(imgData, 0, 0);
             }
         }
 
@@ -284,11 +278,12 @@
             try {
                 document.getElementById('load-percent').innerText = '60%';
                 document.getElementById('load-step').innerText = 'Starting Camera';
+                document.getElementById('load-bar').style.width = '100%';
                 const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: { ideal: 320 }, height: { ideal: 240 } }});
                 video.srcObject = stream; await video.play();
                 video.style.display = 'block'; if (currentFacing === 'user') video.style.transform = 'scaleX(-1)';
                 loader.style.display = 'none';
-                checkOrientation(); // Ensure landscape check runs after load
+                checkOrientation();
             } catch (err) { 
                 document.getElementById('load-percent').innerText = 'ERROR'; 
                 document.getElementById('load-step').innerText = err.message; 
