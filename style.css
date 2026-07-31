@@ -6,9 +6,9 @@
 html, body { height: 100%; background: var(--bg); overflow: hidden; touch-action: none; font-family: 'Inter', system-ui, sans-serif; }
 
 video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
+/* Canvas NO LONGER mirrored in CSS to prevent UI text backwards issues. JS handles the video mirror inside the canvas. */
 #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
-/* FIXED: Removed scaleX(-1) so the UI text is not backwards */
 #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
 
 .hud-btn {
@@ -31,13 +31,14 @@ video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object
 #status { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
 #mode { color: var(--text-subtle); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
 
-/* Premium Animated Loader */
-#loader { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.load-content { animation: fadeUp 1.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; opacity: 0; }
+/* Strict 5-Second Premium Loader */
+#loader { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.8s ease, visibility 0.8s ease; }
+#loader.hide { opacity: 0; visibility: hidden; }
+.load-content { animation: fadeUp 1.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; opacity: 0; text-align: center; }
 #load-percent { color: var(--text); font-size: 3.5rem; font-weight: 200; letter-spacing: -3px; }
 #load-step { color: var(--text-subtle); font-size: 0.875rem; margin-top: 8px; text-transform: uppercase; letter-spacing: 3px;}
 #load-bar-bg { width: 240px; height: 2px; background: var(--panel); margin-top: 40px; overflow: hidden; border-radius: 2px; }
-#load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.8s ease-out; }
+#load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.1s linear; }
 #tejas-footer { color: #444; margin-top: 50px; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; text-align: center; line-height: 1.6; animation: fadeUp 1.5s 0.5s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; opacity: 0; }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
