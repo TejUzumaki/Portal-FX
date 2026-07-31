@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spatial Engine</title>
+    <title>Portal FX</title>
     <link rel="stylesheet" href="style.css">
     <script src="/assets/hands.js"></script>
 </head>
@@ -15,77 +15,59 @@
     </div>
 
     <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
 
-    <div id="status-box">
-        <div id="status">SYSTEM READY</div>
-        <div id="mode">IDLE</div>
+    <div id="ui-layer">
+        <div id="status-box">
+            <div id="status">SYSTEM READY</div>
+            <div id="mode">TRACKING</div>
+        </div>
+
+        <button id="btn-cam" class="hud-btn" onclick="switchCamera()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        </button>
+        <button id="btn-fx" class="hud-btn active" onclick="cycleEffect()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16L3.95 6.06M14.31 16H2.83M16.62 12l-5.74 9.94"></path></svg>
+        </button>
+
+        <button id="init-btn" onclick="initializeHandTracking()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
+            <span>Start</span>
+        </button>
     </div>
-
-    <button id="btn-cam" class="hud-btn" onclick="switchCamera()" aria-label="Switch Camera">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-    </button>
-    <button id="btn-ar" class="hud-btn" onclick="toggleAR()" aria-label="Toggle Spatial Lock">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16.5a1 1 0 0 1-.5.87l-8 4.5a1 1 0 0 1-1 0l-8-4.5a1 1 0 0 1-.5-.87v-9a1 1 0 0 1 .5-.87l8-4.5a1 1 0 0 1 1 0l8 4.5a1 1 0 0 1 .5.87z"></path><path d="M3.27 6.96 12 12.01l8.73-5.05"></path><path d="M12 22.08V12"></path></svg>
-    </button>
-
-    <button id="init-tracking-btn" onclick="initializeHandTracking()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
-        <span>Start</span>
-    </button>
 
     <script>
         const video = document.getElementById('video');
-        const statusDiv = document.getElementById("status");
-        const modeDiv = document.getElementById("mode");
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const loader = document.getElementById('loader');
         const loadPercent = document.getElementById('load-percent');
         const loadStep = document.getElementById('load-step');
-        const btnAr = document.getElementById('btn-ar');
-        const initBtn = document.getElementById('init-tracking-btn');
+        const initBtn = document.getElementById('init-btn');
+        const statusDiv = document.getElementById("status");
+        const modeDiv = document.getElementById("mode");
 
-        let currentFacing = 'user', Engine, handsInstance = null;
-        let smoothX = 0.5, smoothY = 0.5, smoothZ = 0;
-        const LERP = 0.4, Z_LERP = 0.1; // Heavy Z smoothing for depth
-
+        let currentFacing = 'user', handsInstance = null;
         let lastHeartbeat = 0, isRecovering = false;
-        let hoveredObj = null, grabbedObj = null;
-        let isDrawing = false;
-        
-        // Spatial Math State
-        let lastWristRoll = 0, initialGrabRoll = 0, initialObjRoll = 0;
-        let initialGrabZ = 0, initialObjScale = 1;
+        let currentEffect = 0; // 0: Thermal, 1: Polka, 2: Invert
+        const effectNames = ["THERMAL", "POLKA", "INVERT"];
 
-        const COLORS = { white: 0xFFFFFF, lightGrey: 0xDDDDDD, midGrey: 0x888888, actionRed: 0xFF5555, holoCyan: 0x00e5ff };
+        // Offscreen canvas for pixel manipulation
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
-        let currentMode = 'IDLE';
-        let isPinching = false;
-        const PINCH_ON = 0.05, PINCH_OFF = 0.1;
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            offCanvas.width = window.innerWidth;
+            offCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        // --- ROBUST 3D GESTURE MATH ---
-        function isFingerExtended(lm, tip, pip) { return lm[tip].y < lm[pip].y; }
-        
-        function detectGesture(lm) {
-            const indexExt = isFingerExtended(lm, 8, 6);
-            const middleExt = isFingerExtended(lm, 12, 10);
-            const ringExt = isFingerExtended(lm, 16, 14);
-            const pinkyExt = isFingerExtended(lm, 20, 18);
-
-            const dx = lm[8].x - lm[4].x, dy = lm[8].y - lm[4].y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            const isPinch = dist < (isDrawing ? PINCH_ON : PINCH_ON) && !middleExt; // Middle must be curled for pinch!
-
-            if (isPinch) return { gesture: 'PINCH', isPinch: true };
-
-            // Flat Palm (All 5 out)
-            if (indexExt && middleExt && ringExt && pinkyExt) return { gesture: 'PALM', isPinch: false };
-            
-            // Fist (All 4 curled)
-            if (!indexExt && !middleExt && !ringExt && !pinkyExt) return { gesture: 'FIST', isPinch: false };
-
-            // Point (Index out, middle curled)
-            if (indexExt && !middleExt) return { gesture: 'POINT', isPinch: false };
-
-            return { gesture: 'UNKNOWN', isPinch: false };
+        function cycleEffect() {
+            currentEffect = (currentEffect + 1) % 3;
+            modeDiv.innerText = effectNames[currentEffect];
         }
 
         async function robustGetUserMedia(c) {
@@ -94,144 +76,124 @@
             catch (err) { await new Promise(r => setTimeout(r, 1500)); return await navigator.mediaDevices.getUserMedia(c); }
         }
 
-        async function toggleAR() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { if ((await DeviceOrientationEvent.requestPermission()) !== 'granted') return; } catch(e) {}
-            }
-            const isOn = btnAr.classList.toggle('active');
-            if (isOn) {
-                window.addEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL LOCKED"; 
-            } else {
-                window.removeEventListener('deviceorientation', e => { if (e.beta !== null) Engine.updateGyroscope(e.beta, e.gamma); });
-                statusDiv.innerText = "SPATIAL UNLOCKED"; 
-            }
-            Engine[isOn ? 'enableAR' : 'disableAR']();
-        }
-
         function onResults(results) {
             lastHeartbeat = Date.now();
-            try {
-                if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-                    if (isDrawing) { Engine.finishLine(); isDrawing = false; }
-                    if (grabbedObj) { Engine.highlightObject(grabbedObj, false); grabbedObj = null; }
-                    modeDiv.innerText = "IDLE";
-                    return;
-                }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                const lm = results.multiHandLandmarks[0];
-                const { gesture, isPinch: newPinchState } = detectGesture(lm);
-
-                // Hysteresis for pinch
-                if (newPinchState && !isPinching) isPinching = true;
-                else if (!newPinchState && isPinching) isPinching = false;
-
-                // --- SPATIAL CURSOR MATH ---
-                // Use palm center for stability if grabbing, else use index tip
-                let trackX, trackY, trackZ;
-                if (gesture === 'FIST') {
-                    trackX = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
-                    trackY = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
-                    trackZ = (lm[0].z + lm[5].z + lm[9].z + lm[13].z + lm[17].z) / 5;
-                } else {
-                    trackX = lm[8].x; trackY = lm[8].y; trackZ = lm[8].z;
-                }
-
-                smoothX += (trackX - smoothX) * LERP; 
-                smoothY += (trackY - smoothY) * LERP;
-                smoothZ += (trackZ - smoothZ) * Z_LERP; // Heavy smoothing for Z
-
-                const pos3D = Engine.screenTo3D(smoothX, smoothY);
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length === 2) {
+                // Sort hands by X coordinate to ensure consistent Left/Right mapping
+                const hands = results.multiHandLandmarks.sort((a, b) => a[8].x - b[8].x);
                 
-                // --- STATE MACHINE ---
-                if (gesture === 'PINCH' && currentMode !== 'SKETCH') {
-                    currentMode = 'SKETCH'; modeDiv.innerText = "SKETCH";
-                    if (isDrawing) { Engine.finishLine(); isDrawing = false; }
-                } else if (gesture === 'FIST' && currentMode !== 'MANIPULATE') {
-                    currentMode = 'MANIPULATE'; modeDiv.innerText = "MANIPULATE";
-                    if (isDrawing) { Engine.finishLine(); isDrawing = false; }
-                    
-                    // Initiate Grab Math
-                    const objects = Engine.getSceneObjects2D();
-                    let found = null;
-                    for (let obj of objects) {
-                        if (smoothX >= obj.minX && smoothX <= obj.maxX && smoothY >= obj.minY && smoothY <= obj.maxY) { found = obj.id; break; }
-                    }
-                    if (found) {
-                        grabbedObj = found;
-                        Engine.highlightObject(grabbedObj, true);
-                        // Store initial spatial states
-                        initialGrabZ = smoothZ;
-                        initialObjScale = grabbedObj.mesh ? grabbedObj.mesh.scale.x : 1;
-                        
-                        // Wrist Roll Math (Vector from wrist to index knuckle)
-                        const v0 = { x: lm[0].x, y: lm[0].y };
-                        const v1 = { x: lm[5].x, y: lm[5].y };
-                        lastWristRoll = Math.atan2(v1.y - v0.y, v1.x - v0.x) * 180 / Math.PI;
-                        initialGrabRoll = lastWristRoll;
-                        initialObjRoll = grabbedObj.line ? grabbedObj.line.rotation.z : 0;
-                    }
-                } else if (gesture === 'POINT' && currentMode !== 'IDLE') {
-                    currentMode = 'IDLE'; modeDiv.innerText = "IDLE";
-                    if (grabbedObj) { Engine.highlightObject(grabbedObj, false); grabbedObj = null; }
-                }
+                // Left Hand (appears on right side of screen due to mirror, but math is same)
+                const p1 = hands[0][4]; // Left Thumb
+                const p2 = hands[0][8]; // Left Index
+                // Right Hand
+                const p3 = hands[1][8]; // Right Index
+                const p4 = hands[1][4]; // Right Thumb
 
-                // --- EXECUTE STATE ---
-                Engine.updateCursor(pos3D);
+                const w = canvas.width, h = canvas.height;
+                // Convert normalized coords to canvas coords
+                const pts = [p1, p2, p3, p4].map(p => ({ x: (1 - p.x) * w, y: p.y * h }));
 
-                if (currentMode === 'SKETCH') {
-                    Engine.setCursorColor(isPinching ? COLORS.midGrey : COLORS.holoCyan);
-                    if (!isPinching) {
-                        if (!isDrawing) { isDrawing = true; Engine.startDrawing(pos3D); }
-                        else { Engine.continueDrawing(pos3D); }
-                        statusDiv.innerText = "DRAWING";
-                    } else {
-                        if (isDrawing) { Engine.finishLine(); isDrawing = false; statusDiv.innerText = "LINE SAVED"; }
-                        else statusDiv.innerText = "PEN UP";
-                    }
-                } 
-                else if (currentMode === 'MANIPULATE' && grabbedObj) {
-                    Engine.setCursorColor(COLORS.actionRed);
-                    Engine.moveObject(grabbedObj, pos3D);
-                    
-                    // Z-Depth Scaling
-                    const zDelta = smoothZ - initialGrabZ; // Negative if closer
-                    const newScale = Math.max(0.1, initialObjScale + (zDelta * 5)); 
-                    if (grabbedObj.mesh) grabbedObj.mesh.scale.setScalar(newScale);
-                    if (grabbedObj.line) grabbedObj.line.scale.setScalar(newScale);
+                // 1. Save state, clip to the 4-point polygon
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+                ctx.lineTo(pts[2].x, pts[2].y);
+                ctx.lineTo(pts[3].x, pts[3].y);
+                ctx.closePath();
+                ctx.clip();
 
-                    // Wrist Roll Rotation
-                    const v0 = { x: lm[0].x, y: lm[0].y };
-                    const v1 = { x: lm[5].x, y: lm[5].y };
-                    const currentRoll = Math.atan2(v1.y - v0.y, v1.x - v0.x) * 180 / Math.PI;
-                    const rollDelta = currentRoll - lastWristRoll;
-                    
-                    if (Math.abs(rollDelta) < 45) { // Prevent jumps on 180-degree wraparound
-                        const targetRot = initialObjRoll + (currentRoll - initialGrabRoll) * (Math.PI / 180);
-                        if (grabbedObj.mesh) grabbedObj.mesh.rotation.z = targetRot;
-                        if (grabbedObj.line) grabbedObj.line.rotation.z = targetRot;
-                    }
+                // 2. Apply the selected effect inside the clip
+                applyEffect();
 
-                    statusDiv.innerText = `ROT: ${Math.round(currentRoll)}° | SCALE: ${newScale.toFixed(2)}`;
-                } 
-                else {
-                    Engine.setCursorColor(COLORS.white);
-                    statusDiv.innerText = "TRACKING";
-                }
+                // 3. Restore state (removes clip)
+                ctx.restore();
 
-            } catch (e) { console.error(e); }
+                // 4. Draw the crisp White outline of the rectangle
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+                ctx.lineTo(pts[2].x, pts[2].y);
+                ctx.lineTo(pts[3].x, pts[3].y);
+                ctx.closePath();
+                ctx.stroke();
+
+                statusDiv.innerText = "PORTAL ACTIVE";
+            } else {
+                statusDiv.innerText = "SHOW 2 HANDS";
+            }
         }
 
-        async function initializeHandTracking() { initBtn.style.display = 'none'; await buildMediaPipe(); }
+        function applyEffect() {
+            if (currentEffect === 0) { // Thermal
+                offCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imgData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; // brightness 0-1
+                    // Purple to Orange to Yellow gradient
+                    if (v < 0.5) {
+                        d[i] = 255 * (v * 2); // R
+                        d[i+1] = 0; // G
+                        d[i+2] = 255 * (1 - (v * 2)); // B
+                    } else {
+                        d[i] = 255; // R
+                        d[i+1] = 255 * ((v - 0.5) * 2); // G
+                        d[i+2] = 0; // B
+                    }
+                }
+                ctx.putImageData(imgData, 0, 0);
+            } 
+            else if (currentEffect === 1) { // Polka Dots
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FFFFFF';
+                const step = 30;
+                for (let y = 0; y < canvas.height; y += step) {
+                    for (let x = 0; x < canvas.width; x += step) {
+                        const offset = (y / step) % 2 === 0 ? 0 : step / 2;
+                        ctx.beginPath();
+                        ctx.arc(x + offset, y, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            } 
+            else if (currentEffect === 2) { // Invert
+                offCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imgData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    d[i] = 255 - d[i];
+                    d[i+1] = 255 - d[i+1];
+                    d[i+2] = 255 - d[i+2];
+                }
+                ctx.putImageData(imgData, 0, 0);
+            }
+        }
+
+        async function initializeHandTracking() {
+            // Auto Fullscreen on user interaction
+            if (document.documentElement.requestFullscreen) {
+                try { await document.documentElement.requestFullscreen(); } catch(e){}
+            }
+
+            initBtn.style.display = 'none';
+            await buildMediaPipe();
+        }
 
         async function buildMediaPipe() {
             try {
                 if (handsInstance) { try { await handsInstance.close(); } catch(e){} handsInstance = null; }
                 handsInstance = new Hands({ locateFile: (file) => `/assets/${file}` });
-                handsInstance.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+                handsInstance.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
                 handsInstance.onResults(onResults);
                 lastHeartbeat = Date.now(); isRecovering = false;
                 statusDiv.innerText = "AI ONLINE";
+                modeDiv.innerText = effectNames[currentEffect];
                 processFrame();
             } catch (err) { console.error("FATAL:", err); }
         }
@@ -251,7 +213,7 @@
         async function switchCamera() {
             currentFacing = currentFacing === 'user' ? 'environment' : 'user';
             video.style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
-            document.getElementById('three-canvas').style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+            canvas.style.transform = currentFacing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
             try { const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: {ideal: 640}, height: {ideal: 480}}}); video.srcObject = stream; await video.play(); }
             catch(e) { statusDiv.innerText = "CAM ERR"; }
         }
@@ -259,7 +221,6 @@
         async function boot() {
             try {
                 loadPercent.innerText = '20%'; loadStep.innerText = 'Loading Engine';
-                Engine = await import('./js/three-engine.js'); Engine.initThree();
                 loadPercent.innerText = '60%'; loadStep.innerText = 'Starting Camera';
                 const stream = await robustGetUserMedia({ video: { facingMode: currentFacing, width: { ideal: 320 }, height: { ideal: 240 } }});
                 video.srcObject = stream; await video.play();

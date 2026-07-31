@@ -1,43 +1,32 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-    --bg: #000000;
-    --panel: #1E1E1E;
-    --border: #333333;
-    --text: #FFFFFF;
-    --text-subtle: #888888;
+    --bg: #000000; --panel: #1E1E1E; --border: #333333;
+    --text: #FFFFFF; --text-subtle: #888888;
 }
-body { background: var(--bg); overflow: hidden; touch-action: none; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+html, body { height: 100%; background: var(--bg); overflow: hidden; touch-action: none; font-family: 'Inter', system-ui, sans-serif; }
 
-video {
-    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-    object-fit: cover; transform: scaleX(-1); z-index: 1;
-    opacity: 0.5; /* Dim reality to make holograms pop */
-}
+video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
+#canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; transform: scaleX(-1); }
 
-#three-canvas {
-    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: 2; pointer-events: none; transform: scaleX(-1);
-}
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; }
 
 .hud-btn {
-    position: absolute; z-index: 20;
+    position: absolute; pointer-events: all;
     background: rgba(0, 0, 0, 0.7); border: 1px solid var(--border); color: var(--text-subtle);
     width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
-    border-radius: 8px; cursor: pointer; pointer-events: all;
-    transition: all 0.2s ease; backdrop-filter: blur(4px);
+    border-radius: 8px; cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(4px);
 }
 .hud-btn svg { width: 20px; height: 20px; stroke-width: 1.5; }
 .hud-btn.active { border-color: var(--text); color: var(--text); background: rgba(255, 255, 255, 0.15); }
 .hud-btn:active { transform: scale(0.95); }
 
 #btn-cam { top: 20px; right: 20px; }
-#btn-ar { top: 80px; right: 20px; }
+#btn-fx { top: 80px; right: 20px; }
 
 #status-box {
-    position: absolute; top: 20px; left: 20px;
+    position: absolute; top: 20px; left: 20px; pointer-events: none;
     background: rgba(0, 0, 0, 0.7); color: var(--text); padding: 12px 16px;
-    border: 1px solid var(--border); border-radius: 8px;
-    z-index: 10; pointer-events: none; backdrop-filter: blur(4px);
+    border: 1px solid var(--border); border-radius: 8px; backdrop-filter: blur(4px);
 }
 #status { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
 #mode { color: var(--text-subtle); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
@@ -48,11 +37,11 @@ video {
 #load-bar-bg { width: 220px; height: 2px; background: var(--panel); margin-top: 32px; overflow: hidden; border-radius: 2px; }
 #load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.4s ease-out; }
 
-#init-tracking-btn {
+#init-btn {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     z-index: 50; pointer-events: all; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--border); color: var(--text);
     width: 80px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     border-radius: 50%; cursor: pointer; backdrop-filter: blur(6px); transition: all 0.3s ease;
 }
-#init-tracking-btn svg { width: 28px; height: 28px; stroke-width: 1.5; }
-#init-tracking-btn span { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-subtle); }
+#init-btn svg { width: 28px; height: 28px; stroke-width: 1.5; }
+#init-btn span { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-subtle); }
