@@ -8,10 +8,16 @@
     <script src="/assets/hands.js"></script>
 </head>
 <body>
+    <div id="rotate-overlay">
+        <div class="rotate-icon">📱</div>
+        <p>Rotate to Landscape</p>
+    </div>
+
     <div id="loader">
         <div id="load-percent">0%</div>
         <div id="load-step">Initializing</div>
         <div id="load-bar-bg"><div id="load-bar"></div></div>
+        <div id="tejas-footer">Made by Tejas - Enjoy the effects</div>
     </div>
 
     <video id="video" autoplay playsinline muted></video>
@@ -26,14 +32,8 @@
         <button id="btn-cam" class="hud-btn" onclick="switchCamera()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
         </button>
-        <button id="btn-fx" class="hud-btn active" onclick="cycleEffect()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16L3.95 6.06M14.31 16H2.83M16.62 12l-5.74 9.94"></path></svg>
-        </button>
 
-        <button id="init-btn" onclick="initializeHandTracking()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
-            <span>Start</span>
-        </button>
+        <button id="init-btn" onclick="initializeHandTracking()">Initiate</button>
     </div>
 
     <script>
@@ -44,21 +44,37 @@
         const initBtn = document.getElementById('init-btn');
         const statusDiv = document.getElementById("status");
         const modeDiv = document.getElementById("mode");
+        const rotateOverlay = document.getElementById('rotate-overlay');
 
         let currentFacing = 'user', handsInstance = null;
         let lastHeartbeat = 0, isRecovering = false;
         let currentEffect = 0; // 0: Thermal, 1: Polka, 2: Invert
         const effectNames = ["THERMAL", "POLKA", "INVERT"];
+        let lastCycleAngle = 0;
 
-        // Offscreen canvas to fix the putImageData clipping bleed issue
         const offCanvas = document.createElement('canvas');
         const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        // MediaPipe Hand Skeleton Connections
+        const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+        function checkOrientation() {
+            if (window.innerHeight > window.innerWidth) {
+                rotateOverlay.classList.add('show');
+                initBtn.style.display = 'none';
+            } else {
+                rotateOverlay.classList.remove('show');
+                if (!handsInstance) initBtn.style.display = 'block';
+            }
+        }
+        window.addEventListener('resize', checkOrientation);
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             offCanvas.width = window.innerWidth;
             offCanvas.height = window.innerHeight;
+            checkOrientation();
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
@@ -74,82 +90,105 @@
             catch (err) { await new Promise(r => setTimeout(r, 1500)); return await navigator.mediaDevices.getUserMedia(c); }
         }
 
-        // Helper to map normalized coords to canvas, accounting for front camera mirror
         const mapX = (px) => currentFacing === 'user' ? (1 - px) * canvas.width : px * canvas.width;
         const mapY = (py) => py * canvas.height;
+
+        // Perfectly match the CSS object-fit: cover scaling for the internal video feed
+        function drawVideoCover(targetCtx, srcVideo, w, h) {
+            const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
+            if (!vw || !vh) return;
+            const scale = Math.max(w / vw, h / vh);
+            const sw = vw * scale, sh = vh * scale;
+            const sx = (w - sw) / 2, sy = (h - sh) / 2;
+            targetCtx.save();
+            if (currentFacing === 'user') {
+                targetCtx.translate(w, 0); targetCtx.scale(-1, 1);
+                targetCtx.drawImage(srcVideo, w - sx - sw, sy, sw, sh);
+            } else {
+                targetCtx.drawImage(srcVideo, sx, sy, sw, sh);
+            }
+            targetCtx.restore();
+        }
+
+        function drawSkeleton(hand) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            HAND_CONNECTIONS.forEach(([i, j]) => {
+                ctx.moveTo(mapX(hand[i].x), mapY(hand[i].y));
+                ctx.lineTo(mapX(hand[j].x), mapY(hand[j].y));
+            });
+            ctx.stroke();
+            
+            // MediaPipe Red Dots
+            ctx.fillStyle = '#FF3333';
+            hand.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(mapX(pt.x), mapY(pt.y), 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
 
         function onResults(results) {
             lastHeartbeat = Date.now();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length === 2) {
-                // Sort hands by raw X coordinate to consistently identify Left/Right hands
-                const hands = results.multiHandLandmarks.sort((a, b) => a[8].x - b[8].x);
-                
-                // Extract Thumb(4) and Index(8) tips
-                const p1 = hands[0][4]; 
-                const p2 = hands[0][8]; 
-                const p3 = hands[1][8]; 
-                const p4 = hands[1][4]; 
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // 1. Always draw all skeletons first
+                results.multiHandLandmarks.forEach(hand => drawSkeleton(hand));
 
-                // Map to screen pixels
-                const pts = [
-                    { x: mapX(p1.x), y: mapY(p1.y) },
-                    { x: mapX(p2.x), y: mapY(p2.y) },
-                    { x: mapX(p3.x), y: mapY(p3.y) },
-                    { x: mapX(p4.x), y: mapY(p4.y) }
-                ];
+                if (results.multiHandLandmarks.length === 2) {
+                    const hands = results.multiHandLandmarks.sort((a, b) => a[8].x - b[8].x);
+                    
+                    // Auto-cycle effect based on vertical angle shift
+                    let currentAngle = Math.atan2(hands[1][8].y - hands[0][8].y, hands[1][8].x - hands[0][8].x) * 180 / Math.PI;
+                    if (Math.abs(currentAngle - lastCycleAngle) > 25) {
+                        cycleEffect();
+                        lastCycleAngle = currentAngle;
+                    }
 
-                // 1. Save state, create path, and CLIP
-                ctx.save();
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y);
-                ctx.lineTo(pts[1].x, pts[1].y);
-                ctx.lineTo(pts[2].x, pts[2].y);
-                ctx.lineTo(pts[3].x, pts[3].y);
-                ctx.closePath();
-                ctx.clip();
+                    const p1 = hands[0][4], p2 = hands[0][8], p3 = hands[1][8], p4 = hands[1][4];
+                    const pts = [p1, p2, p3, p4].map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
 
-                // 2. Apply the effect (draws only inside the clip)
-                applyEffect();
+                    // 2. Clip and Apply Effect
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    ctx.lineTo(pts[1].x, pts[1].y);
+                    ctx.lineTo(pts[2].x, pts[2].y);
+                    ctx.lineTo(pts[3].x, pts[3].y);
+                    ctx.closePath();
+                    ctx.clip();
+                    applyEffect();
+                    ctx.restore();
 
-                // 3. Restore state (removes clip so we can draw outlines safely)
-                ctx.restore();
+                    // 3. Draw Crisp White Outline
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    ctx.lineTo(pts[1].x, pts[1].y);
+                    ctx.lineTo(pts[2].x, pts[2].y);
+                    ctx.lineTo(pts[3].x, pts[3].y);
+                    ctx.closePath();
+                    ctx.stroke();
 
-                // 4. Draw the crisp White outline of the rectangle
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y);
-                ctx.lineTo(pts[1].x, pts[1].y);
-                ctx.lineTo(pts[2].x, pts[2].y);
-                ctx.lineTo(pts[3].x, pts[3].y);
-                ctx.closePath();
-                ctx.stroke();
+                    statusDiv.innerText = "PORTAL ACTIVE";
+                } else {
+                    statusDiv.innerText = "SHOW 2 HANDS";
+                }
 
-                // 5. Draw White Tracking Dots on the fingertips
+                // 4. ALWAYS draw White Tracking Dots on Thumb(4) and Index(8) for all hands
                 ctx.fillStyle = '#FFFFFF';
-                [4, 8].forEach(joint => {
-                    hands.forEach(hand => {
-                        ctx.beginPath();
-                        ctx.arc(mapX(hand[joint].x), mapY(hand[joint].y), 8, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-                });
-
-                statusDiv.innerText = "PORTAL ACTIVE";
-            } else {
-                statusDiv.innerText = "SHOW 2 HANDS";
-                // Still draw tracking dots if 1 hand is visible
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length === 1) {
-                    const hand = results.multiHandLandmarks[0];
-                    ctx.fillStyle = '#FFFFFF';
+                results.multiHandLandmarks.forEach(hand => {
                     [4, 8].forEach(joint => {
                         ctx.beginPath();
                         ctx.arc(mapX(hand[joint].x), mapY(hand[joint].y), 8, 0, Math.PI * 2);
                         ctx.fill();
                     });
-                }
+                });
+            } else {
+                statusDiv.innerText = "NO HANDS";
             }
         }
 
@@ -157,16 +196,7 @@
             const w = canvas.width, h = canvas.height;
             
             if (currentEffect === 0 || currentEffect === 2) {
-                // Draw video to offscreen canvas, MIRRORED to match the view
-                offCtx.save();
-                offCtx.clearRect(0, 0, w, h);
-                if (currentFacing === 'user') {
-                    offCtx.translate(w, 0);
-                    offCtx.scale(-1, 1);
-                }
-                offCtx.drawImage(video, 0, 0, w, h);
-                offCtx.restore();
-
+                drawVideoCover(offCtx, video, w, h);
                 const imgData = offCtx.getImageData(0, 0, w, h);
                 const d = imgData.data;
 
@@ -174,32 +204,30 @@
                     for (let i = 0; i < d.length; i += 4) {
                         const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; 
                         if (v < 0.5) {
-                            d[i] = 255 * (v * 2); 
-                            d[i+1] = 0; 
-                            d[i+2] = 255 * (1 - (v * 2)); 
+                            d[i] = 255 * (v * 2); d[i+1] = 0; d[i+2] = 255 * (1 - (v * 2)); 
                         } else {
-                            d[i] = 255; 
-                            d[i+1] = 255 * ((v - 0.5) * 2); 
-                            d[i+2] = 0; 
+                            d[i] = 255; d[i+1] = 255 * ((v - 0.5) * 2); d[i+2] = 0; 
                         }
                     }
                 } else if (currentEffect === 2) { // Invert
                     for (let i = 0; i < d.length; i += 4) {
-                        d[i] = 255 - d[i];
-                        d[i+1] = 255 - d[i+1];
-                        d[i+2] = 255 - d[i+2];
+                        d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
                     }
                 }
-
-                // CRITICAL FIX: putImageData to offscreen, then drawImage to main canvas
-                // drawImage respects the clip region, putImageData does NOT!
                 offCtx.putImageData(imgData, 0, 0);
                 ctx.drawImage(offCanvas, 0, 0);
             } 
-            else if (currentEffect === 1) { // Polka Dots
-                ctx.fillStyle = '#000000';
+            else if (currentEffect === 1) { // Translucent Polka Dots
+                // Draw the video first so it's not just black
+                drawVideoCover(offCtx, video, w, h);
+                ctx.drawImage(offCanvas, 0, 0);
+                
+                // Overlay translucent grey
+                ctx.fillStyle = 'rgba(15, 15, 15, 0.7)';
                 ctx.fillRect(0, 0, w, h);
-                ctx.fillStyle = '#FFFFFF';
+                
+                // Draw white dots
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 const step = 35;
                 for (let y = 0; y < h; y += step) {
                     for (let x = 0; x < w; x += step) {
@@ -260,6 +288,7 @@
                 video.srcObject = stream; await video.play();
                 video.style.display = 'block'; if (currentFacing === 'user') video.style.transform = 'scaleX(-1)';
                 loader.style.display = 'none';
+                checkOrientation(); // Ensure landscape check runs after load
             } catch (err) { 
                 document.getElementById('load-percent').innerText = 'ERROR'; 
                 document.getElementById('load-step').innerText = err.message; 

@@ -6,9 +6,9 @@
 html, body { height: 100%; background: var(--bg); overflow: hidden; touch-action: none; font-family: 'Inter', system-ui, sans-serif; }
 
 video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleX(-1); z-index: 1; }
-#canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; /* Mirroring handled in JS now */ }
+#canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
-#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); /* Mirror UI to match video */ }
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 20; pointer-events: none; transform: scaleX(-1); }
 
 .hud-btn {
     position: absolute; pointer-events: all;
@@ -21,7 +21,6 @@ video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object
 .hud-btn:active { transform: scale(0.95); }
 
 #btn-cam { top: 20px; right: 20px; }
-#btn-fx { top: 80px; right: 20px; }
 
 #status-box {
     position: absolute; top: 20px; left: 20px; pointer-events: none;
@@ -36,12 +35,20 @@ video { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object
 #load-step { color: var(--text-subtle); font-size: 0.875rem; margin-top: 8px; text-transform: uppercase; letter-spacing: 2px;}
 #load-bar-bg { width: 220px; height: 2px; background: var(--panel); margin-top: 32px; overflow: hidden; border-radius: 2px; }
 #load-bar { width: 0%; height: 100%; background: var(--text); transition: width 0.4s ease-out; }
+#tejas-footer { color: var(--text-subtle); margin-top: 40px; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; }
 
 #init-btn {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     z-index: 50; pointer-events: all; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--border); color: var(--text);
-    width: 80px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-    border-radius: 50%; cursor: pointer; backdrop-filter: blur(6px); transition: all 0.3s ease;
+    padding: 20px 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 12px; cursor: pointer; backdrop-filter: blur(6px); transition: all 0.3s ease; font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: 2px;
 }
-#init-btn svg { width: 28px; height: 28px; stroke-width: 1.5; }
-#init-btn span { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-subtle); }
+#init-btn:active { transform: translate(-50%, -50%) scale(0.95); border-color: var(--text); }
+
+#rotate-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: var(--bg); z-index: 2000;
+    display: none; flex-direction: column; align-items: center; justify-content: center; color: var(--text);
+}
+#rotate-overlay.show { display: flex; }
+.rotate-icon { font-size: 4rem; animation: spin 2s linear infinite; margin-bottom: 20px; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(90deg); } }
