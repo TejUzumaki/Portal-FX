@@ -20,7 +20,7 @@
             <div id="load-bar-bg"><div id="load-bar"></div></div>
         </div>
         <div id="tejas-footer">
-            Portal FX<br>Made by Tejas
+            Portal FX<br>Made by Tejas — Enjoy the Effects
         </div>
     </div>
 
@@ -52,13 +52,15 @@
 
         let currentFacing = 'user', handsInstance = null;
         let lastHeartbeat = 0, isRecovering = false;
+        
+        // Effects: 0:Thermal, 1:Invert, 2:ASCII, 3:Pixel, 4:Manga
         let currentEffect = 0; 
-        const effectNames = ["LIQUID GLASS", "ASCII", "PIXEL", "MANGA", "MONOCHROME"];
+        const effectNames = ["THERMAL", "INVERT", "ASCII", "CARTOON PIXEL", "MANGA HALFTONE"];
         let lastCycleAngle = 0;
 
+        // Offscreen canvases to prevent putImageData bleeding
         const offCanvas = document.createElement('canvas');
         const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-        // Tiny canvas for pixel downscaling
         const tinyCanvas = document.createElement('canvas');
         const tinyCtx = tinyCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -77,14 +79,18 @@
         function resizeCanvas() {
             canvas.width = window.innerWidth; canvas.height = window.innerHeight;
             offCanvas.width = window.innerWidth; offCanvas.height = window.innerHeight;
-            tinyCanvas.width = 120; tinyCanvas.height = 90;
+            tinyCanvas.width = 160; tinyCanvas.height = 120;
             checkOrientation();
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        function cycleEffect() {
-            currentEffect = (currentEffect + 1) % effectNames.length;
+        function randomizeEffect() {
+            let nextEffect = currentEffect;
+            while(nextEffect === currentEffect) {
+                nextEffect = Math.floor(Math.random() * effectNames.length);
+            }
+            currentEffect = nextEffect;
             modeDiv.innerText = effectNames[currentEffect];
         }
 
@@ -121,7 +127,7 @@
                 ctx.lineTo(mapX(hand[j].x), mapY(hand[j].y));
             });
             ctx.stroke();
-            ctx.fillStyle = '#FFFFFF'; // Clean white dots
+            ctx.fillStyle = '#FFFFFF';
             hand.forEach(pt => { ctx.beginPath(); ctx.arc(mapX(pt.x), mapY(pt.y), 3, 0, Math.PI * 2); ctx.fill(); });
         }
 
@@ -137,23 +143,25 @@
                     
                     let currentAngle = Math.atan2(hands[1][8].y - hands[0][8].y, hands[1][8].x - hands[0][8].x) * 180 / Math.PI;
                     if (Math.abs(currentAngle - lastCycleAngle) > 25) {
-                        cycleEffect();
+                        randomizeEffect();
                         lastCycleAngle = currentAngle;
                     }
 
                     const p1 = hands[0][4], p2 = hands[0][8], p3 = hands[1][8], p4 = hands[1][4];
                     const pts = [p1, p2, p3, p4].map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
 
+                    // CLIP REGION
                     ctx.save();
                     ctx.beginPath();
                     ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y);
                     ctx.lineTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y);
                     ctx.closePath();
                     ctx.clip();
-                    applyEffect();
+                    
+                    applyEffect(); // Effect applied strictly inside clip
                     ctx.restore();
 
-                    // Premium Border
+                    // PREMIUM BORDER
                     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 6;
                     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.lineTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.closePath(); ctx.stroke();
 
@@ -180,67 +188,62 @@
 
         function applyEffect() {
             const w = canvas.width, h = canvas.height;
-            drawVideoCover(offCtx, video, w, h);
-
-            if (currentEffect === 0) { // LIQUID GLASS + LAVENDER
-                ctx.drawImage(offCanvas, 0, 0);
-                ctx.filter = 'blur(3px) brightness(1.15) contrast(1.05)';
-                ctx.drawImage(offCanvas, 0, 0);
-                ctx.filter = 'none';
-                
-                ctx.globalCompositeOperation = 'screen';
-                const t = Date.now() / 1000;
-                for(let i=0; i<6; i++) {
-                    const yPos = h/2 + Math.sin(t * 0.8 + i) * 40 + (i - 3) * 25;
-                    const xPos = w/2 + Math.cos(t * 0.5 + i * 1.5) * (w/4);
-                    const radius = 80 + Math.sin(t * 1.2 + i) * 30;
-                    const grad = ctx.createRadialGradient(xPos, yPos, 0, xPos, yPos, radius);
-                    grad.addColorStop(0, 'rgba(200, 180, 255, 0.35)');
-                    grad.addColorStop(0.5, 'rgba(180, 150, 230, 0.15)');
-                    grad.addColorStop(1, 'rgba(150, 120, 200, 0)');
-                    ctx.fillStyle = grad;
-                    ctx.beginPath(); ctx.ellipse(xPos, yPos, radius, radius/3, 0, 0, Math.PI * 2); ctx.fill();
+            
+            if (currentEffect === 0) { // THERMAL (Offscreen pipeline to prevent bleed)
+                drawVideoCover(offCtx, video, w, h);
+                const imgData = offCtx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; 
+                    if (v < 0.5) { d[i] = 255 * (v * 2); d[i+1] = 0; d[i+2] = 255 * (1 - (v * 2)); } 
+                    else { d[i] = 255; d[i+1] = 255 * ((v - 0.5) * 2); d[i+2] = 0; }
                 }
-                ctx.globalCompositeOperation = 'source-over';
-                
-                const g1 = ctx.createLinearGradient(0, h * (0.3 + Math.sin(t)*0.1), w, h * (0.7 + Math.cos(t)*0.1));
-                g1.addColorStop(0, 'rgba(255, 255, 255, 0)');
-                g1.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
-                g1.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                ctx.fillStyle = g1; ctx.fillRect(0, 0, w, h);
+                offCtx.putImageData(imgData, 0, 0);
+                ctx.drawImage(offCanvas, 0, 0); // drawImage strictly obeys clip()
             } 
-            else if (currentEffect === 1) { // ASCII ART
+            else if (currentEffect === 1) { // INVERT
+                drawVideoCover(offCtx, video, w, h);
+                const imgData = offCtx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
+                }
+                offCtx.putImageData(imgData, 0, 0);
+                ctx.drawImage(offCanvas, 0, 0);
+            }
+            else if (currentEffect === 2) { // ASCII ART
                 ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h);
-                ctx.fillStyle = '#FFFFFF'; ctx.font = '10px monospace';
+                ctx.fillStyle = '#FFFFFF'; 
+                ctx.font = '10px "JetBrains Mono", monospace';
+                drawVideoCover(tinyCtx, video, 160, 120);
+                const imgData = tinyCtx.getImageData(0, 0, 160, 120).data;
                 const chars = " .:-=+*#%@";
-                // Downscale video to tiny canvas for sampling
-                tinyCtx.drawImage(video, 0, 0, 120, 90);
-                const imgData = tinyCtx.getImageData(0, 0, 120, 90).data;
-                const cellW = w / 120, cellH = h / 90;
-                for(let y=0; y<90; y++) {
-                    for(let x=0; x<120; x++) {
-                        const i = (y * 120 + x) * 4;
+                const cellW = w / 160, cellH = h / 120;
+                for(let y=0; y<120; y++) {
+                    for(let x=0; x<160; x++) {
+                        const i = (y * 160 + x) * 4;
                         const v = (imgData[i] + imgData[i+1] + imgData[i+2]) / 3;
                         const c = chars[Math.floor((v/255) * (chars.length-1))];
                         ctx.fillText(c, x * cellW, (y+1) * cellH);
                     }
                 }
             }
-            else if (currentEffect === 2) { // CARTOON PIXEL
-                tinyCtx.drawImage(video, 0, 0, 120, 90);
-                const imgData = tinyCtx.getImageData(0, 0, 120, 90).data;
+            else if (currentEffect === 3) { // CARTOON PIXEL
+                drawVideoCover(tinyCtx, video, 160, 120);
+                const imgData = tinyCtx.getImageData(0, 0, 160, 120).data;
                 for(let i=0; i<imgData.length; i+=4) {
-                    // Posterize colors for cartoon feel
+                    // Posterize colors for retro cartoon feel
                     imgData[i] = Math.floor(imgData[i] / 64) * 64;
                     imgData[i+1] = Math.floor(imgData[i+1] / 64) * 64;
                     imgData[i+2] = Math.floor(imgData[i+2] / 64) * 64;
                 }
-                tinyCtx.putImageData(new ImageData(imgData, 120, 90), 0, 0);
+                tinyCtx.putImageData(new ImageData(imgData, 160, 120), 0, 0);
                 ctx.imageSmoothingEnabled = false;
                 ctx.drawImage(tinyCanvas, 0, 0, w, h);
                 ctx.imageSmoothingEnabled = true;
             }
-            else if (currentEffect === 3) { // MANGA HALFTONE
+            else if (currentEffect === 4) { // MANGA HALFTONE
+                drawVideoCover(offCtx, video, w, h);
                 const imgData = offCtx.getImageData(0, 0, w, h);
                 const d = imgData.data;
                 for (let i = 0; i < d.length; i += 4) {
@@ -248,9 +251,10 @@
                     const c = v > 120 ? 255 : 0; // High contrast B&W
                     d[i] = c; d[i+1] = c; d[i+2] = c;
                 }
-                ctx.putImageData(imgData, 0, 0);
+                offCtx.putImageData(imgData, 0, 0);
+                ctx.drawImage(offCanvas, 0, 0);
                 
-                // Halftone overlay
+                // Halftone dots overlay
                 ctx.fillStyle = '#000000';
                 const step = 12;
                 for (let y = 0; y < h; y += step) {
@@ -261,15 +265,6 @@
                         ctx.fill();
                     }
                 }
-            }
-            else if (currentEffect === 4) { // PURE MONOCHROME
-                const imgData = offCtx.getImageData(0, 0, w, h);
-                const d = imgData.data;
-                for (let i = 0; i < d.length; i += 4) {
-                    const v = (d[i] + d[i+1] + d[i+2]) / 3;
-                    d[i] = v; d[i+1] = v; d[i+2] = v;
-                }
-                ctx.putImageData(imgData, 0, 0);
             }
         }
 
