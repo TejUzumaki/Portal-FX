@@ -37,6 +37,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
         </button>
 
+        <!-- NEW: Unfreeze Button -->
+        <button id="btn-unfreeze" class="hud-btn" onclick="unfreeze()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+
         <button id="init-btn" onclick="initializeHandTracking()">Initiate</button>
     </div>
 
@@ -50,15 +55,18 @@
         const statusDiv = document.getElementById("status");
         const modeDiv = document.getElementById("mode");
         const rotateOverlay = document.getElementById('rotate-overlay');
+        const btnUnfreeze = document.getElementById('btn-unfreeze');
 
         let currentFacing = 'user', handsInstance = null;
         let lastHeartbeat = 0, isRecovering = false;
         let currentEffect = 0; 
         const effectNames = ["THERMAL", "INVERT", "ASCII", "CARTOON PIXEL", "MANGA HALFTONE"];
         
-        // Timers
+        // Timers & State
         let gestureHoldStart = 0;
         let activeGesture = "NONE";
+        let lastTriggerGesture = "NONE"; // Prevents same gesture from triggering twice
+        
         let freezeHoldStart = 0;
         let isFrozen = false;
         let frozenPts = [];
@@ -101,6 +109,15 @@
             currentEffect = next;
         }
 
+        function unfreeze() {
+            isFrozen = false;
+            frozenPts = [];
+            freezeHoldStart = 0;
+            btnUnfreeze.classList.remove('active');
+            statusDiv.innerText = "FRAME UNFROZEN";
+            modeDiv.innerText = "STATE: LIVE";
+        }
+
         async function robustGetUserMedia(c) {
             if (video.srcObject) { video.srcObject.getTracks().forEach(t => { t.stop(); t.onended = null; }); video.srcObject = null; }
             try { return await navigator.mediaDevices.getUserMedia(c); }
@@ -110,7 +127,6 @@
         const mapX = (px) => currentFacing === 'user' ? (1 - px) * canvas.width : px * canvas.width;
         const mapY = (py) => py * canvas.height;
 
-        // PERFECT MIRROR MATH - No more breaking in half
         function drawVideoCover(targetCtx, srcVideo, w, h) {
             const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
             if (!vw || !vh) return;
@@ -162,15 +178,22 @@
                     if (g !== "NONE") {
                         if (g !== activeGesture) { activeGesture = g; gestureHoldStart = Date.now(); }
                         
-                        const holdTime = (Date.now() - gestureHoldStart) / 1000;
-                        if (holdTime < 3) {
-                            statusDiv.innerText = `HOLD ${g} FOR ${Math.ceil(3 - holdTime)}s TO CHANGE FX`;
-                            modeDiv.innerText = `STATE: WAITING`;
+                        // STRICT RULE: If they repeat the last gesture, ignore it completely.
+                        if (g === lastTriggerGesture) {
+                            statusDiv.innerText = "GESTURE ALREADY USED. SHOW A DIFFERENT ONE.";
+                            modeDiv.innerText = "STATE: WAITING FOR NEW GESTURE";
                         } else {
-                            randomizeEffect();
-                            statusDiv.innerText = `FX CHANGED TO: ${effectNames[currentEffect]}`;
-                            modeDiv.innerText = `STATE: UPDATED`;
-                            gestureHoldStart = 0; activeGesture = "NONE"; // Reset
+                            const holdTime = (Date.now() - gestureHoldStart) / 1000;
+                            if (holdTime < 3) {
+                                statusDiv.innerText = `HOLD ${g} FOR ${Math.ceil(3 - holdTime)}s TO CHANGE FX`;
+                                modeDiv.innerText = `STATE: WAITING`;
+                            } else {
+                                randomizeEffect();
+                                statusDiv.innerText = `FX CHANGED TO: ${effectNames[currentEffect]}`;
+                                modeDiv.innerText = `STATE: UPDATED`;
+                                lastTriggerGesture = g; // Lock this gesture so it can't trigger again
+                                gestureHoldStart = 0; activeGesture = "NONE"; 
+                            }
                         }
                     } else {
                         activeGesture = "NONE";
@@ -196,9 +219,14 @@
                             statusDiv.innerText = `HOLD PINKIES FOR ${Math.ceil(3 - holdTime)}s TO ${isFrozen ? 'UNFREEZE' : 'FREEZE'}`;
                             modeDiv.innerText = `STATE: WAITING`;
                         } else {
-                            isFrozen = !isFrozen;
-                            if (isFrozen) frozenPts = pts.map(p => ({...p}));
-                            freezeHoldStart = 0; // Reset
+                            if (isFrozen) {
+                                unfreeze();
+                            } else {
+                                isFrozen = true;
+                                frozenPts = pts.map(p => ({...p}));
+                                btnUnfreeze.classList.add('active'); // Show unfreeze button
+                            }
+                            freezeHoldStart = 0; 
                         }
                     } else {
                         freezeHoldStart = 0;
@@ -227,7 +255,7 @@
                     applyEffect(intensity);
                     ctx.restore();
 
-                    // Border (Grey if frozen, White if live)
+                    // Border
                     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 6;
                     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.lineTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.closePath(); ctx.stroke();
 
