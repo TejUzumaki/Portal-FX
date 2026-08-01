@@ -29,7 +29,7 @@
 
     <div id="ui-layer">
         <div id="status-box">
-            <div id="status">FX: NONE | INTENSITY: 0%</div>
+            <div id="status">SHOW 1 HAND TO CHANGE FX</div>
             <div id="mode">STATE: IDLE</div>
         </div>
 
@@ -55,19 +55,13 @@
         let lastHeartbeat = 0, isRecovering = false;
         let currentEffect = 0; 
         const effectNames = ["THERMAL", "INVERT", "ASCII", "CARTOON PIXEL", "MANGA HALFTONE"];
-        let lastCycleAngle = 0;
-        let idleTimer = null;
-
-        // Freeze State
+        
+        // Timers
+        let gestureHoldStart = 0;
+        let activeGesture = "NONE";
+        let freezeHoldStart = 0;
         let isFrozen = false;
         let frozenPts = [];
-        let lastTapTime = 0;
-        let tapCooldown = false;
-
-        // Adaptive Resolution
-        let renderScale = 1.0;
-        let frameTimes = [];
-        let lastFrameTime = performance.now();
 
         const offCanvas = document.createElement('canvas');
         const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
@@ -95,7 +89,11 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        function isFingerExt(lm, tip, pip) { return lm[tip].y < lm[pip].y - 0.02; }
+        function isExt(lm, tip, pip) { return lm[tip].y < lm[pip].y - 0.03; }
+        function isPalm(lm) { return isExt(lm,8,6) && isExt(lm,12,10) && isExt(lm,16,14) && isExt(lm,20,18); }
+        function isFist(lm) { return !isExt(lm,8,6) && !isExt(lm,12,10) && !isExt(lm,16,14) && !isExt(lm,20,18); }
+        function isPeace(lm) { return isExt(lm,8,6) && isExt(lm,12,10) && !isExt(lm,16,14) && !isExt(lm,20,18); }
+        function isRock(lm) { return isExt(lm,8,6) && !isExt(lm,12,10) && !isExt(lm,16,14) && isExt(lm,20,18); }
 
         function randomizeEffect() {
             let next = currentEffect;
@@ -112,16 +110,19 @@
         const mapX = (px) => currentFacing === 'user' ? (1 - px) * canvas.width : px * canvas.width;
         const mapY = (py) => py * canvas.height;
 
+        // PERFECT MIRROR MATH - No more breaking in half
         function drawVideoCover(targetCtx, srcVideo, w, h) {
             const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
             if (!vw || !vh) return;
             const scale = Math.max(w / vw, h / vh);
             const sw = vw * scale, sh = vh * scale;
             const sx = (w - sw) / 2, sy = (h - sh) / 2;
+            
             targetCtx.save();
             if (currentFacing === 'user') {
-                targetCtx.translate(w, 0); targetCtx.scale(-1, 1);
-                targetCtx.drawImage(srcVideo, w - sx - sw, sy, sw, sh);
+                targetCtx.translate(w, 0); 
+                targetCtx.scale(-1, 1);
+                targetCtx.drawImage(srcVideo, sx, sy, sw, sh);
             } else {
                 targetCtx.drawImage(srcVideo, sx, sy, sw, sh);
             }
@@ -144,65 +145,68 @@
         function onResults(results) {
             lastHeartbeat = Date.now();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Adaptive Resolution Math
-            const now = performance.now();
-            const delta = now - lastFrameTime;
-            lastFrameTime = now;
-            frameTimes.push(delta);
-            if (frameTimes.length > 15) frameTimes.shift();
-            const avgDelta = frameTimes.reduce((a,b)=>a+b) / frameTimes.length;
-            if (frameTimes.length === 15) {
-                if (avgDelta > 33 && renderScale > 0.4) renderScale -= 0.05;
-                else if (avgDelta < 22 && renderScale < 1.0) renderScale += 0.05;
-            }
+            statusBox.classList.add('active');
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                statusBox.classList.add('active');
-                if (idleTimer) clearTimeout(idleTimer);
-
                 if (!isFrozen) results.multiHandLandmarks.forEach(hand => drawSkeleton(hand));
 
-                if (results.multiHandLandmarks.length === 2) {
+                // --- 1 HAND LOGIC (Change FX) ---
+                if (results.multiHandLandmarks.length === 1) {
+                    const hand = results.multiHandLandmarks[0];
+                    let g = "NONE";
+                    if (isPalm(hand)) g = "PALM";
+                    else if (isFist(hand)) g = "FIST";
+                    else if (isPeace(hand)) g = "PEACE";
+                    else if (isRock(hand)) g = "ROCK";
+
+                    if (g !== "NONE") {
+                        if (g !== activeGesture) { activeGesture = g; gestureHoldStart = Date.now(); }
+                        
+                        const holdTime = (Date.now() - gestureHoldStart) / 1000;
+                        if (holdTime < 3) {
+                            statusDiv.innerText = `HOLD ${g} FOR ${Math.ceil(3 - holdTime)}s TO CHANGE FX`;
+                            modeDiv.innerText = `STATE: WAITING`;
+                        } else {
+                            randomizeEffect();
+                            statusDiv.innerText = `FX CHANGED TO: ${effectNames[currentEffect]}`;
+                            modeDiv.innerText = `STATE: UPDATED`;
+                            gestureHoldStart = 0; activeGesture = "NONE"; // Reset
+                        }
+                    } else {
+                        activeGesture = "NONE";
+                        statusDiv.innerText = `SHOW 1 HAND (PALM/FIST/PEACE/ROCK)`;
+                        modeDiv.innerText = `STATE: IDLE`;
+                    }
+                } 
+                // --- 2 HAND LOGIC (Portal & Freeze) ---
+                else if (results.multiHandLandmarks.length === 2) {
                     const hands = results.multiHandLandmarks.sort((a, b) => a[8].x - b[8].x);
                     const h1 = hands[0], h2 = hands[1];
-
-                    // Manual Gestures
-                    const m1 = isFingerExt(h1, 12, 10), m2 = isFingerExt(h2, 12, 10);
-                    const p1 = isFingerExt(h1, 20, 18), p2 = isFingerExt(h2, 20, 18);
-                    
-                    if (m1 && m2) currentEffect = 3; // Pixel
-                    else if (m1) currentEffect = 1; // Invert
-                    else if (m2) currentEffect = 2; // ASCII
-                    else if (p1 && p2) currentEffect = 4; // Manga
-                    else {
-                        // Angle Randomizer (Only if no manual gesture)
-                        let currentAngle = Math.atan2(h2[8].y - h1[8].y, h2[8].x - h1[8].x) * 180 / Math.PI;
-                        if (Math.abs(currentAngle - lastCycleAngle) > 25) {
-                            randomizeEffect();
-                            lastCycleAngle = currentAngle;
-                        }
-                    }
 
                     const p1_4 = h1[4], p2_8 = h1[8], p3_8 = h2[8], p4_4 = h2[4];
                     let pts = [p1_4, p2_8, p3_8, p4_4].map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
 
-                    // Freeze Double-Tap Logic
-                    const distIndex = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
-                    if (distIndex < 0.05 && !tapCooldown) {
-                        tapCooldown = true;
-                        if (Date.now() - lastTapTime < 400) {
+                    // Freeze Logic (Both Pinkies)
+                    const p1_ext = isExt(h1, 20, 18), p2_ext = isExt(h2, 20, 18);
+                    if (p1_ext && p2_ext) {
+                        if (freezeHoldStart === 0) freezeHoldStart = Date.now();
+                        const holdTime = (Date.now() - freezeHoldStart) / 1000;
+                        
+                        if (holdTime < 3) {
+                            statusDiv.innerText = `HOLD PINKIES FOR ${Math.ceil(3 - holdTime)}s TO ${isFrozen ? 'UNFREEZE' : 'FREEZE'}`;
+                            modeDiv.innerText = `STATE: WAITING`;
+                        } else {
                             isFrozen = !isFrozen;
                             if (isFrozen) frozenPts = pts.map(p => ({...p}));
-                        } else {
-                            lastTapTime = Date.now();
+                            freezeHoldStart = 0; // Reset
                         }
-                        setTimeout(() => tapCooldown = false, 600);
+                    } else {
+                        freezeHoldStart = 0;
                     }
 
                     if (isFrozen) pts = frozenPts;
 
-                    // Intensity Math (Area of Polygon)
+                    // Intensity Math
                     let area = 0;
                     for (let i = 0; i < pts.length; i++) {
                         const j = (i + 1) % pts.length;
@@ -230,67 +234,46 @@
                     ctx.strokeStyle = isFrozen ? '#888888' : '#FFFFFF'; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.lineTo(pts[2].x, pts[2].y); ctx.lineTo(pts[3].x, pts[3].y); ctx.closePath(); ctx.stroke();
 
-                    // Telemetry HUD Update
-                    statusDiv.innerText = `FX: ${effectNames[currentEffect]} | INTENSITY: ${Math.round(intensity*100)}%`;
-                    modeDiv.innerText = `STATE: ${isFrozen ? 'FROZEN' : 'LIVE'}`;
-                } else {
-                    statusDiv.innerText = `FX: ${effectNames[currentEffect]} | INTENSITY: 0%`;
-                    modeDiv.innerText = `STATE: ${isFrozen ? 'FROZEN' : 'LIVE'}`;
-                }
-
-                if (!isFrozen) {
-                    ctx.fillStyle = '#FFFFFF';
-                    results.multiHandLandmarks.forEach(hand => {
-                        [4, 8].forEach(joint => {
-                            ctx.beginPath();
-                            ctx.arc(mapX(hand[joint].x), mapY(hand[joint].y), 6, 0, Math.PI * 2);
-                            ctx.fill();
-                        });
-                    });
+                    if (freezeHoldStart === 0) {
+                        statusDiv.innerText = `FX: ${effectNames[currentEffect]} | INTENSITY: ${Math.round(intensity*100)}%`;
+                        modeDiv.innerText = `STATE: ${isFrozen ? 'FROZEN' : 'LIVE'}`;
+                    }
                 }
             } else {
-                if (!isFrozen) {
-                    idleTimer = setTimeout(() => statusBox.classList.remove('active'), 2000);
-                    statusDiv.innerText = `FX: ${effectNames[currentEffect]} | INTENSITY: 0%`;
-                    modeDiv.innerText = `STATE: ${isFrozen ? 'FROZEN' : 'IDLE'}`;
-                }
+                statusDiv.innerText = "SHOW 1 HAND TO CHANGE FX | 2 HANDS FOR PORTAL";
+                modeDiv.innerText = `STATE: ${isFrozen ? 'FROZEN' : 'IDLE'}`;
             }
         }
 
         function applyEffect(intensity) {
             const w = canvas.width, h = canvas.height;
-            const scaleW = Math.floor(w * renderScale), scaleH = Math.floor(h * renderScale);
             
             if (currentEffect === 0) { // THERMAL
-                drawVideoCover(offCtx, video, scaleW, scaleH);
-                const imgData = offCtx.getImageData(0, 0, scaleW, scaleH);
+                drawVideoCover(offCtx, video, w, h);
+                const imgData = offCtx.getImageData(0, 0, w, h);
                 const d = imgData.data;
-                const threshold = 0.5 - (intensity * 0.2); // Intensity shifts threshold
                 for (let i = 0; i < d.length; i += 4) {
                     const v = (d[i] + d[i+1] + d[i+2]) / 3 / 255; 
-                    if (v < threshold) { d[i] = 255 * (v / threshold); d[i+1] = 0; d[i+2] = 255 * (1 - (v / threshold)); } 
-                    else { d[i] = 255; d[i+1] = 255 * ((v - threshold) / (1 - threshold)); d[i+2] = 0; }
+                    if (v < 0.5) { d[i] = 255 * (v * 2); d[i+1] = 0; d[i+2] = 255 * (1 - (v * 2)); } 
+                    else { d[i] = 255; d[i+1] = 255 * ((v - 0.5) * 2); d[i+2] = 0; }
                 }
                 offCtx.putImageData(imgData, 0, 0);
-                ctx.drawImage(offCanvas, 0, 0, w, h);
+                ctx.drawImage(offCanvas, 0, 0);
             } 
             else if (currentEffect === 1) { // INVERT
-                drawVideoCover(offCtx, video, scaleW, scaleH);
-                const imgData = offCtx.getImageData(0, 0, scaleW, scaleH);
+                drawVideoCover(offCtx, video, w, h);
+                const imgData = offCtx.getImageData(0, 0, w, h);
                 const d = imgData.data;
                 for (let i = 0; i < d.length; i += 4) {
-                    // Partial invert based on intensity
-                    d[i] = (255 - d[i]) * intensity + d[i] * (1 - intensity);
-                    d[i+1] = (255 - d[i+1]) * intensity + d[i+1] * (1 - intensity);
-                    d[i+2] = (255 - d[i+2]) * intensity + d[i+2] * (1 - intensity);
+                    d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
                 }
                 offCtx.putImageData(imgData, 0, 0);
-                ctx.drawImage(offCanvas, 0, 0, w, h);
+                ctx.drawImage(offCanvas, 0, 0);
             }
             else if (currentEffect === 2) { // ASCII
                 ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h);
                 ctx.fillStyle = '#FFFFFF'; 
-                const fontSize = Math.floor(6 + intensity * 14); // 6px to 20px
+                const fontSize = Math.floor(8 + intensity * 12); 
                 ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
                 drawVideoCover(tinyCtx, video, 160, 120);
                 const imgData = tinyCtx.getImageData(0, 0, 160, 120).data;
@@ -306,9 +289,9 @@
                 }
             }
             else if (currentEffect === 3) { // CARTOON PIXEL
-                // Intensity controls pixel chunkiness
-                const pixW = Math.floor(160 - intensity * 120); // 160 down to 40
+                const pixW = Math.floor(160 - intensity * 120); 
                 const pixH = Math.floor(120 - intensity * 90);
+                tinyCanvas.width = pixW; tinyCanvas.height = pixH;
                 drawVideoCover(tinyCtx, video, pixW, pixH);
                 const imgData = tinyCtx.getImageData(0, 0, pixW, pixH).data;
                 for(let i=0; i<imgData.length; i+=4) {
@@ -322,10 +305,10 @@
                 ctx.imageSmoothingEnabled = true;
             }
             else if (currentEffect === 4) { // MANGA HALFTONE
-                drawVideoCover(offCtx, video, scaleW, scaleH);
-                const imgData = offCtx.getImageData(0, 0, scaleW, scaleH);
+                drawVideoCover(offCtx, video, w, h);
+                const imgData = offCtx.getImageData(0, 0, w, h);
                 const d = imgData.data;
-                const threshold = 120 - (intensity * 40); // Intensity increases contrast
+                const threshold = 120 - (intensity * 40); 
                 for (let i = 0; i < d.length; i += 4) {
                     const v = (d[i] + d[i+1] + d[i+2]) / 3;
                     const c = v > threshold ? 255 : 0; 
@@ -335,7 +318,7 @@
                 ctx.drawImage(offCanvas, 0, 0, w, h);
                 
                 ctx.fillStyle = '#000000';
-                const step = Math.floor(6 + intensity * 10); // Intensity controls dot size
+                const step = Math.floor(8 + intensity * 8); 
                 for (let y = 0; y < h; y += step) {
                     for (let x = 0; x < w; x += step) {
                         const offset = (y / step) % 2 === 0 ? 0 : step / 2;
@@ -375,7 +358,7 @@
                 handsInstance.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
                 handsInstance.onResults(onResults);
                 lastHeartbeat = Date.now(); isRecovering = false;
-                statusDiv.innerText = `FX: ${effectNames[currentEffect]} | INTENSITY: 0%`;
+                statusDiv.innerText = "SHOW 1 HAND TO CHANGE FX | 2 HANDS FOR PORTAL";
                 modeDiv.innerText = `STATE: IDLE`;
                 processFrame();
             } catch (err) { console.error("FATAL:", err); }
